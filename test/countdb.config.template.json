@@ -1,0 +1,7 @@
+{
+  "bucket": "my-bucket",
+  "workgroup": "countdb",
+  "athena-logs": "temp/countdb/athena",
+  "aws-default-region": "us-east-1",
+  "lambda-role": "arn:aws:iam::123456789:role/countdb-role"
+}

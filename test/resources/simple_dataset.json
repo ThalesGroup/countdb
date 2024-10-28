@@ -1,0 +1,29 @@
+{
+  "dataset": "simple_dataset",
+  "views": {
+    "view1": "SELECT 2 AS val1"
+  },
+  "temp-tables": {
+    "daily": "SELECT 1 AS my_value"
+  },
+  "counters": [
+    {
+      "id": 1,
+      "name": "simple_str_counter",
+      "sql": "SELECT ARRAY['simple1'] AS str_key, ARRAY[] AS int_key, 1 AS value\nUNION ALL \nSELECT ARRAY['simple2'] AS str_key, ARRAY[] AS int_key, 2 AS value",
+      "max-record": true
+    },
+    {
+      "id": 2,
+      "name": "simple_int_counter",
+      "sql": "SELECT ARRAY[1] AS int_key, ARRAY[] AS str_key, IF(DAY(DATE('{day}')) = 15, 100, 1) AS value\nUNION ALL \nSELECT ARRAY[val1] AS int_key, ARRAY[] AS str_key, DAY(DATE('{day}')) AS value FROM countdb.simple_dataset_view1",
+      "min-avg": 1,
+      "max-record": true
+    },
+    {
+      "id": 3,
+      "name": "simple_counter_no_max_record",
+      "sql": "SELECT ARRAY[] AS str_key, ARRAY[] AS int_key, my_value AS value FROM {daily}"
+    }
+  ]
+}

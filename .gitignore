@@ -1,0 +1,16 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+### Python Patch ###
+.venv/
+.idea/
+
+do-not-commit/*
+test/countdb.config.json
+**/.pytest_cache
+aws/**/config
