@@ -5,6 +5,7 @@ import os
 import re
 import sys
 from base64 import b64decode
+from typing import List
 
 import boto3
 import botocore.config
@@ -85,11 +86,15 @@ def _upload_dataset(path: str):
 
 
 def _run_operation(payload):
-    try:
-        return _invoke(bytes(json.dumps(payload), encoding="UTF8"))
-    except ClientError as e:
-        if "Function not found" in e.response["Message"]:
-            return f"Function not found: {_get_function_name()}"
+    if _local_mode():
+        from lambda_function import lambda_handler
+        return lambda_handler(payload, None)
+    else:
+        try:
+            return _invoke(bytes(json.dumps(payload), encoding="UTF8"))
+        except ClientError as e:
+            if "Function not found" in e.response["Message"]:
+                return f"Function not found: {_get_function_name()}"
 
 
 def _install():
@@ -117,11 +122,17 @@ def _init_env(config_file: str) -> bool:
     init_evn_from_config_file(config_file)
     creds_str = os.environ.get("CREDS")
     if creds_str is not None:
-        print("Used CREDS environment variable")
-        os.environ["AWS_ACCESS_KEY_ID"] = re.search("accessKey: ([^,]+),",
-                                                    creds_str, flags=re.MULTILINE).groups()[0]
-        os.environ["AWS_SECRET_ACCESS_KEY"] = re.search("secretKey: ([^,]+),",
-                                                        creds_str, flags=re.MULTILINE).groups()[0]
+        creds_str = creds_str.replace("\"", "")
+        m = re.search("accessKey: ([^,]+),", creds_str, flags=re.MULTILINE)
+        if m:
+            os.environ["AWS_ACCESS_KEY_ID"] = m.groups()[0]
+        m = re.search("secretKey: ([^,]+),", creds_str, flags=re.MULTILINE)
+        if m:
+            os.environ["AWS_SECRET_ACCESS_KEY"] = m.groups()[0]
+        m = re.search("securityToken: ([^,]+),", creds_str, flags=re.MULTILINE)
+        if m:
+            os.environ["AWS_SECURITY_TOKEN"] = m.groups()[0]
+
     sts = boto3.client('sts')
     try:
         result = sts.get_caller_identity()
@@ -145,13 +156,20 @@ def init_evn_from_config_file(config_file: str = _DEFAULT_CONFIG_FILE):
         if "region" in config_dict:
             os.environ["AWS_DEFAULT_REGION"] = config_dict["region"]
 
+def _local_mode():
+    return os.environ.get("LOCAL_MODE", "false").lower() == "true"
 
-if __name__ == '__main__':
-    is_admin = len(sys.argv) > 1 and sys.argv[1] == "admin"
+
+def run_cli(cli_args: List[str]):
+    is_admin = cli_args[1] == "admin"
     if is_admin:
-        parsed_command = _parse_admin_cli_input(sys.argv[2:])
+        parsed_command = _parse_admin_cli_input(cli_args[2:])
     else:
-        parsed_command = _parse_cli_input(sys.argv[1:])
+        parsed_command = _parse_cli_input(cli_args[1:])
     if _init_env(parsed_command["config"]):
         del parsed_command["config"]
         _run_cli_command(parsed_command)
+
+
+if __name__ == '__main__':
+    run_cli(sys.argv)
