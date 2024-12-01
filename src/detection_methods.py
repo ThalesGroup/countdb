@@ -270,20 +270,24 @@ def _get_pattern_detection_sql(inner_sql: str) -> str:
     return f"""
 WITH data AS (
   {inner_sql}),
+stats AS (
+    SELECT counter_id, int_key, str_key, AVG(value) AS avg_value
+    FROM data
+    GROUP BY counter_id, int_key, str_key
+    HAVING AVG(value) >= {_DEFAULT_MIN_AVG}),
 matches AS (
-  SELECT *
-  FROM data
+  SELECT counter_id, int_key, str_key, top_interval
+  FROM (data INNER JOIN stats USING (counter_id, int_key, str_key))
   MATCH_RECOGNIZE(
      PARTITION BY counter_id, int_key, str_key
      ORDER BY interval
      MEASURES
-              LAST(FINAL_UP.interval) AS top_interval
+         LAST(FINAL_UP.interval) AS top_interval
      AFTER MATCH SKIP PAST LAST ROW
      PATTERN ({pattern_str})
      DEFINE
-              MIN_AVG AS AVG(value) >= COALESCE(ARBITRARY(min_avg), {_DEFAULT_MIN_AVG}),
-              UP AS value >= PREV(value),
-              FINAL_UP AS value >= PREV(value) AND value >= START.value * 3 AND value >= AVG(value) * 1.75)),
+         UP AS value >= PREV(value),
+         FINAL_UP AS value >= PREV(value) AND value >= START.value * 3 AND value >= avg_value * 1.75)),
 matches_agg AS (
   SELECT counter_id, int_key, str_key, ARRAY_AGG(top_interval ORDER BY top_interval) AS anomalies
   FROM matches
