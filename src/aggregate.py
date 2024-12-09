@@ -25,12 +25,21 @@ class PeriodCountersCreator(BasCountersCreator, ABC):
                 result[c.aggregation_method].append(c.id)
         return result
 
+    def should_create(self, dataset: str, counter_id: int = None, session: Session = None) -> bool:
+        if counter_id:
+            return True
+        for c in get_dataset(dataset, session).counters.values():
+            if c.aggregate:
+                return True
+        logging.info(f"Dataset: {dataset}. No counters to aggregate")
+        return False
+
     def get_sql(self, dataset: str, day: str, counter_id: int = None, session: Session = None, **kwargs) -> str:
         counters_to_use = [get_dataset(dataset, session).counters[counter_id]] \
             if counter_id else get_dataset(dataset, session).counters.values()
-        counters_bv_agg = self._get_counters_by_aggregation(counters_to_use)
+        counters_by_agg = self._get_counters_by_aggregation(counters_to_use)
         result = ""
-        for agg_method in counters_bv_agg:
+        for agg_method in counters_by_agg:
             if len(result) > 0:
                 result += "\nUNION ALL\n"
             result += f"""(SELECT counter_id, int_key1, int_key2, str_key1, str_key2, 
@@ -38,7 +47,7 @@ class PeriodCountersCreator(BasCountersCreator, ABC):
 FROM {self.database_name()}.daily_counters
 WHERE dataset = '{dataset}'
     AND {self._get_period_filter(day)}
-    AND counter_id IN ({str(counters_bv_agg[agg_method])[1:-1]})
+    AND counter_id IN ({str(counters_by_agg[agg_method])[1:-1]})
 GROUP BY 1, 2, 3, 4, 5
 ORDER BY 1, 2, 3, 4, 5)"""
         return result
@@ -173,9 +182,8 @@ def _run_agg_task(dataset: str, log_str: str, table_name: str, interval: str, co
     session = get_session()
     try:
         logging.info(log_str)
-        if counter_ids:
-            for counter_id in counter_ids:
-                get_table_creator(table_name).create_day(dataset, interval, counter_id, session=session)
+        for counter_id in counter_ids if counter_ids else [None]:
+            get_table_creator(table_name).create_day(dataset, interval, counter_id, session=session)
         return True
     except Exception as e:
         logging.exception(f"Error collecting data for {log_str}. Error message: {str(e)}")

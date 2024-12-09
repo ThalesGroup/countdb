@@ -115,7 +115,23 @@ LOCATION '{self.get_full_location()}'"""
     def _split_to_counters() -> bool:
         return True
 
+    def should_create(self, dataset: str, counter_id: int = None, session: Session = None) -> bool:
+        """
+            Determines whether data should be created for a given dataset and counter ID.
+
+            Args:
+                dataset (str): The name of the dataset.
+                counter_id (int, optional): The ID of the counter. Defaults to None.
+                session (Session, optional): The boto3 session to use. Defaults to None.
+
+            Returns:
+                bool: True if the data should be created, False otherwise.
+            """
+        return True
+
     def create_day(self, dataset: str, day: str, counter_id: int = None, session: Session = None, **kwargs) -> dict:
+        if not self.should_create(dataset, counter_id, session):
+            return {"result": "OK"}
         query_stats = QueryStats()
         partition_path = self._partition_path(dataset, day, **kwargs)
         if counter_id:
