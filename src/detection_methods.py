@@ -15,7 +15,11 @@ from utils import get_last_finished_week, \
     get_last_finished_month, get_session, _MAX_WORKERS
 
 _MAX_RSD = 0.3
-_MIN_DISTANCE_FROM_RSD = 0.4
+_MIN_DISTANCE_FROM_RSD = {
+    "day": 0.9,
+    "week": 0.4,
+    "month": 0.4
+}
 _MIN_TREND_SLOPE = 0.1
 _DEFAULT_MIN_AVG = 10.0
 
@@ -216,7 +220,7 @@ anomalies AS (
   FROM stats CROSS JOIN LATERAL
     (SELECT CASE
         WHEN stddev_value / avg_value <= {_MAX_RSD}
-             AND ABS(1 - value / avg_value) >= {_MIN_DISTANCE_FROM_RSD} THEN 'RSD'
+             AND ABS(1 - value / avg_value) >= {_MIN_DISTANCE_FROM_RSD[interval_type]} THEN 'RSD'
         WHEN value > avg_value + 3 * stddev_value THEN 'EmpiricalRule'
         WHEN value > q3 + 1.5 * iqr THEN 'IQR'
        ELSE NULL
