@@ -161,7 +161,7 @@ def _local_mode():
 
 
 def run_cli(cli_args: List[str]):
-    is_admin = cli_args[1] == "admin"
+    is_admin = len(cli_args) > 1 and cli_args[1] == "admin"
     if is_admin:
         parsed_command = _parse_admin_cli_input(cli_args[2:])
     else:
