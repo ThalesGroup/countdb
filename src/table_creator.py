@@ -11,6 +11,7 @@ from temp_table_utils import generate_temp_table_name, get_temp_database_name
 from utils import get_session
 
 _DEFAULT_DATABASE_NAME = "countdb"
+_COUNTER_PARTITION_NAME = "cnt_id"
 
 
 def get_database_name() -> str:
@@ -135,7 +136,7 @@ LOCATION '{self.get_full_location()}'"""
         query_stats = QueryStats()
         partition_path = self._partition_path(dataset, day, **kwargs)
         if counter_id:
-            partition_path += f"/cnt_id={counter_id}"
+            partition_path += f"/{_COUNTER_PARTITION_NAME}={counter_id}"
         deleted = clear_s3_folder(partition_path, session=session)
         if deleted > 0:
             logging.info(f"Deleted {deleted} objects from {partition_path}")
@@ -152,7 +153,7 @@ LOCATION '{self.get_full_location()}'"""
 CREATE TABLE {temp_table_name} 
 WITH (external_location='s3://{get_bucket()}/{partition_path}', 
       format='PARQUET', {"" if counter_id is not None or not self._split_to_counters() else
-            "partitioned_by=ARRAY['cnt_id'],"}
+            f"partitioned_by=ARRAY['{_COUNTER_PARTITION_NAME}'],"}
       bucketed_by=ARRAY['counter_id'], bucket_count=1) AS {sql}""", query_stats, session=session)
             if result["Status"] != "SUCCEEDED":
                 if "StateChangeReason" in result:

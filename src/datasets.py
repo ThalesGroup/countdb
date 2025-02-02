@@ -8,7 +8,7 @@ from boto3 import Session
 from athena_utils import QueryStats, run_query, get_query_results
 from s3_utils import upload_content_to_s3, list_s3_folder_keys, get_s3_object_content, \
     clear_s3_folder, get_session, list_s3_folders, delete_s3_object, get_root_folder
-from table_creator import get_table_creators, get_table_creator, get_database_name
+from table_creator import get_table_creators, get_table_creator, get_database_name, _COUNTER_PARTITION_NAME
 from temp_table_utils import generate_temp_table_name
 
 _DAY_PH = '{day}'
@@ -308,7 +308,9 @@ def validate_dataset(dataset: _CounterDataset) -> List[str]:
     return result
 
 
-def clear_dataset_data(dataset_name: str, table_name: Optional[str], from_interval: Optional[str]) -> int:
+def clear_dataset_data(dataset_name: str, table_name: Optional[str],
+                       from_interval: Optional[str],
+                       counter_id: Optional[int]) -> int:
     deleted = 0
     tables = [t.table_name() for t in get_table_creators() if t.table_name()]
     remove_dataset = table_name is None and from_interval is None
@@ -333,6 +335,8 @@ def clear_dataset_data(dataset_name: str, table_name: Optional[str], from_interv
             for interval_folder in sorted(sub_folders) if sub_folders else []:
                 interval = interval_folder[interval_folder.rfind("=") + 1:-1]
                 if interval >= from_interval:
+                    if counter_id is not None:
+                        interval_folder = f"{interval_folder}{_COUNTER_PARTITION_NAME}={counter_id}/"
                     logging.info(f"Current folder: {interval_folder}")
                     table_deleted += clear_s3_folder(interval_folder)
         logging.info(f"Deleted {table_deleted} objects from folder: {folder}")

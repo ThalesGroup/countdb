@@ -74,7 +74,7 @@ def _do_aggregate(args) -> Dict:
         from_day = None
         to_day = None
     interval = args["interval"] if "interval" in args else None
-    counter_id = int(args["counter_id"]) if "counter_id" in args else None
+    counter_id = int(args["counter"]) if "counter" in args else None
     override = "override" in args and str(args["override"]).lower() == "true"
     return aggregate(from_day, to_day, dataset_name=args["dataset"] if "dataset" in args else None,
                      interval_type=interval, override=override, counter_ids=[counter_id] if counter_id else None)
@@ -96,7 +96,7 @@ def _do_collect(args) -> Dict:
     return collect(from_day, to_day,
                    dataset_name=args["dataset"] if "dataset" in args else None,
                    override=override,
-                   counter_id=int(args["counter_id"]) if "counter_id" in args else None)
+                   counter_id=int(args["counter"]) if "counter" in args else None)
 
 
 def _do_update_dataset(event: dict):
@@ -106,9 +106,10 @@ def _do_update_dataset(event: dict):
 
 def _do_clear_dataset(json_data):
     dataset_name = json_data["dataset"]
-    table_name = json_data["table"] if "table" in json_data else None
-    from_interval = json_data["from"] if "from" in json_data else None
-    deleted = clear_dataset_data(dataset_name, table_name, from_interval)
+    table_name = json_data.get("table")
+    from_interval = json_data.get("from_day")
+    counter_id = json_data.get("counter")
+    deleted = clear_dataset_data(dataset_name, table_name, from_interval, counter_id)
     return {"deleted": deleted, "operation": "delete"}
 
 
