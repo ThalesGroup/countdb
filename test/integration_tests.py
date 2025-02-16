@@ -1,4 +1,5 @@
 import logging
+import os
 
 import pytest
 
@@ -14,7 +15,7 @@ from utils import days_range
 def init_env():
     logging.info("Init env")
     init_aws_creds()
-    init_evn_from_config_file()
+    init_evn_from_config_file(os.path.join(os.path.dirname(__file__), "countdb.config.json"))
     if not database_exists(get_database_name()):
         handle_event({"operation": "init"})
 
