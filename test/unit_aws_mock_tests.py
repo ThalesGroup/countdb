@@ -31,7 +31,7 @@ def athena_mock(monkeypatch):
     s3 = session.client("s3")
     s3.create_bucket(Bucket=os.environ["BUCKET"])
     athena = session.client("athena")
-    athena.create_work_group(Name=os.environ["WORKGROUP"])
+    athena.create_work_group(Name=os.environ["WORKGROUP"], Configuration={})
     yield athena_mock
     mock.stop()
 
