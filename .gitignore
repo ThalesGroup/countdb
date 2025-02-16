@@ -11,7 +11,6 @@ venv.bak/
 .idea/
 
 do-not-commit/*
-test/countdb.config.json
 **/.pytest_cache
 aws/**/config
 **/__pycache__/

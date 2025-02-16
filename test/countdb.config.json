@@ -1,0 +1,6 @@
+{
+  "bucket": "countdb-test",
+  "workgroup": "countdb",
+  "athena-logs": "temp/countdb/athena",
+  "aws-default-region": "us-east-1"
+}
