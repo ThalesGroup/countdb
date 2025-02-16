@@ -46,3 +46,8 @@ jobs:
         run: |
           source .venv/bin/activate          
           PYTHONPATH=src python -m pytest --color=yes --log-cli-level=INFO test/unit_aws_mock_tests.py --dist=loadgroup -n 3
+
+      - name: Run integration tests
+        run: |
+          source .venv/bin/activate          
+          PYTHONPATH=src python -m pytest --color=yes --log-cli-level=INFO --durations=0 test/integration_tests.py
