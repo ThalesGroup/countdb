@@ -47,6 +47,12 @@ jobs:
           source .venv/bin/activate          
           PYTHONPATH=src python -m pytest --color=yes --log-cli-level=INFO test/unit_aws_mock_tests.py --dist=loadgroup -n 3
 
+      - name: Get AWS Permissions
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/count-db-run-integration-tests
+          aws-region: us-east-1
+
       - name: Run integration tests
         run: |
           source .venv/bin/activate          
