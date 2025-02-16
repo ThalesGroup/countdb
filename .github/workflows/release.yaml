@@ -18,7 +18,7 @@ jobs:
     - name: Call zip_sources
       id: zip_sources
       run: |
-        zip_file=$(python pack_sources.py)
+        PYTHONPATH=src zip_file=$(python pack_sources.py)
         echo "zip_file=$zip_file" >> $GITHUB_ENV      
 
     - name: Create GitHub Release
