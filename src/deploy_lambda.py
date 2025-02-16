@@ -1,48 +1,17 @@
 import json
 import os
-import tempfile
 from random import randint
 from time import sleep
 from typing import Dict
-from zipfile import ZipFile
 
 import boto3
 from botocore.exceptions import ClientError
 
-_DEP_PACKAGE = os.path.join(tempfile.gettempdir(), "deployment_package.zip")
+from pack_sources import zip_sources
+
 _REQUIRED_ENV_VARS = ["BUCKET", "WORKGROUP", "ATHENA_LOGS"]
 _OPTIONAL_ENV_VARS = ["ROOT_FOLDER", "DATABASE_NAME", "TEMP_DATABASE_NAME"]
 _DEFAULT_FUNCTION_NAME = "countdb"
-
-
-def _get_root_dir() -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
-
-
-def _get_sources_dir() -> str:
-    return os.path.join(_get_root_dir(), "src")
-
-
-def _zip_sources():
-    if os.path.exists(_DEP_PACKAGE):
-        os.remove(_DEP_PACKAGE)
-    with ZipFile(_DEP_PACKAGE, "w") as zfile:
-        print("Sources dir: " + _get_sources_dir())
-        for f in os.listdir(_get_sources_dir()):
-            if f not in ["lambda_function.py", "countdb_cli.py", "deploy_lambda.py"]:
-                zfile.write(os.path.join(_get_sources_dir(), f), f)
-        with open(os.path.join(_get_sources_dir(), "lambda_function.py"), "r") as f:
-            lambda_main_code = f.read()
-        with tempfile.NamedTemporaryFile() as tf:
-            tf.write(str.encode(lambda_main_code.replace("$VERSION$", _get_version())))
-            tf.flush()
-            zfile.write(tf.name, "lambda_function.py")
-
-
-def _get_version():
-    with open(os.path.join(_get_root_dir(), "app.yaml"), "r") as f:
-        version = f.readlines()[-1].split(":")[1].strip()
-    return version
 
 
 def _generate_random_id() -> str:
@@ -102,8 +71,8 @@ def deploy(update_config: bool = False, update_code: bool = True, env_vars: Dict
     description = "aws:states:opt-out"
     if not function_exists():
         print("Function does not exist. Creating it")
-        _zip_sources()
-        with open(_DEP_PACKAGE, "rb") as file:
+        dep_package = zip_sources()
+        with open(dep_package, "rb") as file:
             client.create_function(
                 FunctionName=_get_function_name(),
                 Runtime="python3.12",
@@ -129,11 +98,11 @@ def deploy(update_config: bool = False, update_code: bool = True, env_vars: Dict
             Timeout=lambda_timeout,
         )
     if update_code:
-        _zip_sources()
+        dep_pacakge = zip_sources()
         print("Function exists. Updating code")
         if update_config:
             sleep(5)  # avoid resource update conflict
-        with open(_DEP_PACKAGE, "rb") as file:
+        with open(dep_pacakge, "rb") as file:
             client.update_function_code(
                 FunctionName=_get_function_name(),
                 ZipFile=file.read(),

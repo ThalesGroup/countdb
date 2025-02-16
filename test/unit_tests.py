@@ -1,3 +1,4 @@
+import zipfile
 from datetime import datetime
 
 import pytest
@@ -56,6 +57,17 @@ class TestUtils:
         assert value == "2024-04"
         value = get_last_finished_month("2024-05-31")
         assert value == "2024-05"
+
+
+class TestZipSources:
+    def test_zip_sources(self):
+        from deploy_lambda import zip_sources
+        zip_file = zip_sources()
+        assert zip_file.endswith(".zip")
+        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+            file_names = zip_ref.namelist()
+            assert len(file_names) > 0
+            assert "lambda_function.py" in file_names
 
 
 class TestCLI:
