@@ -18,8 +18,11 @@ jobs:
     - name: Call zip_sources
       id: zip_sources
       run: |
-        PYTHONPATH=src zip_file=$(python src/pack_sources.py)
-        echo "zip_file=$zip_file" >> $GITHUB_ENV      
+        PYTHONPATH=src script_output=$(python src/pack_sources.py)
+        zip_file=$(echo "$script_output" | sed -n '1p')
+        version=$(echo "$script_output" | sed -n '2p')
+        echo "zip_file=$zip_file" >> $GITHUB_ENV
+        echo "version=$version" >> $GITHUB_ENV
 
     - name: Create GitHub Release
       id: create_release
@@ -27,8 +30,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: v1.0.0
-        release_name: Release v1.0.0
+        tag_name: ${{ env.version }}
+        release_name: Release ${{ env.version }}
         draft: false
         prerelease: false
 

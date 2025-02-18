@@ -11,8 +11,7 @@ def _get_root_dir() -> str:
 
 def _get_version():
     with open(os.path.join(_get_root_dir(), "app.yaml"), "r") as f:
-        version = f.readlines()[-1].split(":")[1].strip()
-    return version
+        return f.readlines()[-1].split(":")[1].strip()
 
 
 def _get_sources_dir() -> str:
@@ -34,14 +33,14 @@ def _zip_sources() -> str:
             z_file.write(tf.name, "lambda_function.py")
     return _DEP_PACKAGE
 
-def get_package(version: str) -> str:
-    if version == "sources":
+def get_package(pacakge_version: str) -> str:
+    if pacakge_version == "sources":
         return _zip_sources()
-    elif version == "latest":
+    elif pacakge_version == "latest":
         raise NotImplementedError("Fetching latest release is not implemented yet")
     else:
-        raise NotImplementedError(f"Fetching specific version: {version} is not implemented yet")
+        raise NotImplementedError(f"Fetching specific version: {pacakge_version} is not implemented yet")
 
 if __name__ == "__main__":
-    zip_file = _zip_sources()
-    print(zip_file)
+    print(_zip_sources())
+    print(_get_version())
