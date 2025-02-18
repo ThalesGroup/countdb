@@ -19,7 +19,7 @@ def _get_sources_dir() -> str:
     return os.path.join(_get_root_dir(), "src")
 
 
-def zip_sources() -> str:
+def _zip_sources() -> str:
     if os.path.exists(_DEP_PACKAGE):
         os.remove(_DEP_PACKAGE)
     with ZipFile(_DEP_PACKAGE, "w") as z_file:
@@ -34,7 +34,14 @@ def zip_sources() -> str:
             z_file.write(tf.name, "lambda_function.py")
     return _DEP_PACKAGE
 
+def get_package(version: str) -> str:
+    if version == "sources":
+        return _zip_sources()
+    elif version == "latest":
+        raise NotImplementedError("Fetching latest release is not implemented yet")
+    else:
+        raise NotImplementedError(f"Fetching specific version: {version} is not implemented yet")
 
 if __name__ == "__main__":
-    zip_file = zip_sources()
+    zip_file = _zip_sources()
     print(zip_file)

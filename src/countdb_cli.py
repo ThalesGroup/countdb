@@ -19,6 +19,8 @@ def _parse_admin_cli_input(argv) -> dict:
     parser.add_argument("operation",
                         choices=["install", "uninstall"],
                         help="Operation")
+    parser.add_argument("--version", required=False, default="latest",
+                        help="By default latest version is installed. It is possible to choose a version from github releases using the 'sources' keyword")
     parser.add_argument("--config", required=False, default=_DEFAULT_CONFIG_FILE,
                         help=f"Configuration file. Default file is {_DEFAULT_CONFIG_FILE}")
     args_namespace = parser.parse_args(args=argv)
@@ -54,7 +56,7 @@ def _run_cli_command(command: dict):
     print(f"Function: {_get_function_name()}. Going to run command: {command}")
     operation = command["operation"]
     if operation == "install":
-        result = _install()
+        result = _install(command["version"])
     elif operation == "uninstall":
         result = _uninstall()
     elif operation == "upload":
@@ -97,12 +99,12 @@ def _run_operation(payload):
                 return f"Function not found: {_get_function_name()}"
 
 
-def _install():
+def _install(version: str):
     from deploy_lambda import deploy, function_exists
     if function_exists():
-        deploy(update_config=True, update_code=True)
+        deploy(version, update_config=True, update_code=True)
     else:
-        deploy()
+        deploy(version)
         print("Creating database")
         _run_operation({"operation": "init"})
     return {"success": True}

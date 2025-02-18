@@ -4,6 +4,7 @@ from datetime import datetime
 import pytest
 
 from countdb_cli import _parse_cli_input
+from pack_sources import get_package
 from utils import days_range, weeks_range, month_range, get_last_finished_week, get_last_finished_month, get_day_back
 
 
@@ -61,8 +62,7 @@ class TestUtils:
 
 class TestZipSources:
     def test_zip_sources(self):
-        from deploy_lambda import zip_sources
-        zip_file = zip_sources()
+        zip_file = get_package("sources")
         assert zip_file.endswith(".zip")
         with zipfile.ZipFile(zip_file, 'r') as zip_ref:
             file_names = zip_ref.namelist()

@@ -2,12 +2,11 @@ import json
 import os
 from random import randint
 from time import sleep
-from typing import Dict
 
 import boto3
 from botocore.exceptions import ClientError
 
-from pack_sources import zip_sources
+from pack_sources import get_package
 
 _REQUIRED_ENV_VARS = ["BUCKET", "WORKGROUP", "ATHENA_LOGS"]
 _OPTIONAL_ENV_VARS = ["ROOT_FOLDER", "DATABASE_NAME", "TEMP_DATABASE_NAME"]
@@ -56,9 +55,8 @@ def _create_rule(rule_name: str, cron_exp: str, operation: str, interval: str = 
                                  SourceArn=f"arn:aws:events:{region}:{account_id}:rule/{rule_name}")
 
 
-def deploy(update_config: bool = False, update_code: bool = True, env_vars: Dict[str, str] = None):
-    if env_vars is None:
-        env_vars = {v: os.environ[v] for v in _REQUIRED_ENV_VARS}
+def deploy(version: str, update_config: bool = False, update_code: bool = True):
+    env_vars = {v: os.environ[v] for v in _REQUIRED_ENV_VARS}
     client = boto3.client("lambda")
     for env_var_name in _REQUIRED_ENV_VARS:
         if env_var_name not in env_vars:
@@ -71,7 +69,7 @@ def deploy(update_config: bool = False, update_code: bool = True, env_vars: Dict
     description = "aws:states:opt-out"
     if not function_exists():
         print("Function does not exist. Creating it")
-        dep_package = zip_sources()
+        dep_package = get_package(version)
         with open(dep_package, "rb") as file:
             client.create_function(
                 FunctionName=_get_function_name(),
@@ -98,7 +96,7 @@ def deploy(update_config: bool = False, update_code: bool = True, env_vars: Dict
             Timeout=lambda_timeout,
         )
     if update_code:
-        dep_pacakge = zip_sources()
+        dep_pacakge = get_package(version)
         print("Function exists. Updating code")
         if update_config:
             sleep(5)  # avoid resource update conflict

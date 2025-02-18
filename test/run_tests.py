@@ -39,7 +39,7 @@ def run_tests(unit_tests: bool = True, integration_tests: bool = True) -> bool:
         if not _run_test_file("integration_tests.py", workers=1, log_durations=True, additional_log=True):
             return False
         init_evn_from_config_file()
-        deploy(False, True)
+        deploy("sources", False, True)
         sleep(5)
         if not _run_test_file("lambda_integration_tests.py", workers=1, log_durations=True, additional_log=True):
             return False
