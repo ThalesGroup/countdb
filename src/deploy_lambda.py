@@ -6,8 +6,6 @@ from time import sleep
 import boto3
 from botocore.exceptions import ClientError
 
-from pack_sources import get_package
-
 _REQUIRED_ENV_VARS = ["BUCKET", "WORKGROUP", "ATHENA_LOGS"]
 _OPTIONAL_ENV_VARS = ["ROOT_FOLDER", "DATABASE_NAME", "TEMP_DATABASE_NAME"]
 _DEFAULT_FUNCTION_NAME = "countdb"
@@ -69,7 +67,7 @@ def deploy(version: str, update_config: bool = False, update_code: bool = True):
     description = "aws:states:opt-out"
     if not function_exists():
         print("Function does not exist. Creating it")
-        dep_package = get_package(version)
+        dep_package = _get_package(version)
         with open(dep_package, "rb") as file:
             client.create_function(
                 FunctionName=_get_function_name(),
@@ -96,7 +94,7 @@ def deploy(version: str, update_config: bool = False, update_code: bool = True):
             Timeout=lambda_timeout,
         )
     if update_code:
-        dep_pacakge = get_package(version)
+        dep_pacakge = _get_package(version)
         print("Function exists. Updating code")
         if update_config:
             sleep(5)  # avoid resource update conflict
@@ -158,3 +156,11 @@ def _clear_scheduling():
         for sid in statement_ids:
             lambda_client.remove_permission(FunctionName=function_name, StatementId=sid)
 
+def _get_package(pacakge_version: str) -> str:
+    if pacakge_version == "sources":
+        from pack_sources import zip_sources
+        return zip_sources()
+    elif pacakge_version == "latest":
+        raise NotImplementedError("Fetching latest release is not implemented yet")
+    else:
+        raise NotImplementedError(f"Fetching specific version: {pacakge_version} is not implemented yet")
