@@ -108,7 +108,7 @@ def _install(version: str):
             deploy(version)
             print("Creating database")
             _run_operation({"operation": "init"})
-        return {"success": True}
+        return {"success": True, "version": version}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
