@@ -95,7 +95,7 @@ To run the CLI you will need python, and boto3 AWS python API installed. You can
 
 ```pip install boto3```
 
-The CLI is a single python application, that you can download from the repository and store locally. It is recommended to create an alias to the CLI. Here is an example command:
+The CLI is a single file python application, that you can download from the repository and store locally. It is recommended to create an alias to the CLI. Here is an example command:
 
 ```alias countdb="python /your-location/countdb_cli.py"``` 
 
@@ -104,7 +104,16 @@ It is also recommended making the alias permanent. For example, the above comman
 The CLI invokes the CountDB Lambda function. To use it you need AWS authentication with the relevant permissions. There are multiple options for authentication. You can run the CLI from an instance with a matching instance role, set environment variables, use a local file and more. You can find all the options under https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html
 
 ## Installation
-To install the project clone the repo and run the installation using CountDB CLI. Unlike most CLI operations, installation requires additional permissions, and not only Lambda invoke. Create and update lambda functions and Lambda triggers are needed, and should be done by a user with admin rights. 
+It is possible to installed a released version, or install from sources. By default the latest released version is installed. To install the latest version use the following command:
+```countdb admin install```
+
+To install a specific version use the following command:
+```countdb admin install --version=0.0.2```
+
+To install the project from source you have to clone the entire repo and run the following command:
+```countdb admin install --version=sources```
+
+Unlike most CLI operations, installation requires additional permissions, and not only Lambda invoke. Create and update lambda functions and Lambda triggers are needed, and should be done by a user with admin rights. 
 You will also need to supply a role for the deployed lambda function, s3 bucket and an athena workgroup.
 
 It is recommended to create a configuration file, which will be used by the CLI for installation and updates. The config file should be stored in the same location as the datasets files, under source control. Here is the required information inside the configuration file:
@@ -147,7 +156,3 @@ CountDB has additional configuration settings, allowing you to change the defaul
 | root-folder        | countdb         | Prefix to hold CountDB data and tables under               |
 | database-name      | countdb         | Name of a database to create and hold CountDB tables under |
 | temp-database-name | countdb_temp    | Database to create temporary tables used by CountDB        |
-
-To install countdb go to the directory containing countdb config file and run the following command:
-
-```countdb admin install```
