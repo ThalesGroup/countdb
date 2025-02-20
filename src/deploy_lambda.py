@@ -199,7 +199,7 @@ def _github_api_request(url: str = None) -> dict:
             else:
                 raise ValueError("Access forbidden. Check your token permissions or repository access.")
         elif response.status != 200:
-            raise ValueError(f"Unknown error: {response.status}")
+            raise ValueError(f"Unknown error: {response.read().decode()}")
         else:
             return json.loads(response.read().decode())
     finally:
