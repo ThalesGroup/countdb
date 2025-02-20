@@ -1,7 +1,10 @@
+import http.client
 import json
 import os
+import tempfile
 from random import randint
 from time import sleep
+from typing import List
 
 import boto3
 from botocore.exceptions import ClientError
@@ -9,6 +12,10 @@ from botocore.exceptions import ClientError
 _REQUIRED_ENV_VARS = ["BUCKET", "WORKGROUP", "ATHENA_LOGS"]
 _OPTIONAL_ENV_VARS = ["ROOT_FOLDER", "DATABASE_NAME", "TEMP_DATABASE_NAME"]
 _DEFAULT_FUNCTION_NAME = "countdb"
+
+_GITHUB_REPO_OWNER = "ThalesGroup"
+_GITHUB_REPO_NAME = "countdb"
+
 
 
 def _generate_random_id() -> str:
@@ -161,6 +168,78 @@ def _get_package(pacakge_version: str) -> str:
         from pack_sources import zip_sources
         return zip_sources()
     elif pacakge_version == "latest":
-        raise NotImplementedError("Fetching latest release is not implemented yet")
+        return _download_sources("latest")
     else:
-        raise NotImplementedError(f"Fetching specific version: {pacakge_version} is not implemented yet")
+        versions = _get_versions()
+        if pacakge_version not in versions:
+            raise ValueError(f"Unknown version: {pacakge_version}")
+        return _download_sources(pacakge_version)
+
+
+def _github_api_request(url: str = None) -> dict:
+    conn = None
+    try:
+        conn = http.client.HTTPSConnection("api.github.com")
+        headers = {
+            "User-Agent": "Python http.client",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        if "GITHUB_TOKEN" in os.environ:
+            headers["Authorization"] = f"token {os.environ['GITHUB_TOKEN']}"
+        final_url = f"/repos/{_GITHUB_REPO_OWNER}/{_GITHUB_REPO_NAME}"
+        if url:
+            final_url += f"/{url}"
+        conn.request("GET", final_url, headers=headers)
+        response = conn.getresponse()
+        if response.status == 404:
+            raise ValueError("Repository not found or you do not have access.")
+        elif response.status == 403:
+            if response.getheader('X-RateLimit-Remaining') == '0':
+                raise ValueError("API rate limit exceeded.")
+            else:
+                raise ValueError("Access forbidden. Check your token permissions or repository access.")
+        elif response.status != 200:
+            raise ValueError(f"Unknown error: {response.status}")
+        else:
+            return json.loads(response.read().decode())
+    finally:
+        if conn:
+            conn.close()
+
+def _get_versions() -> List[str]:
+    releases = _github_api_request("releases")
+    return [r["tag_name"] for r in releases]
+
+def _download_sources(version: str):
+    if version == "latest":
+        release = _github_api_request(f"releases/latest")
+    else:
+        release = _github_api_request(f"releases/tags/{version}")
+    asset = release["assets"][0]
+
+    conn = None
+    try:
+        conn = http.client.HTTPSConnection("api.github.com")
+        headers = {
+            "User-Agent": "Python http.client",
+            "Accept": "application/octet-stream"
+        }
+        if "GITHUB_TOKEN" in os.environ:
+            headers["Authorization"] = f"token {os.environ['GITHUB_TOKEN']}"
+        conn.request("GET", f"/repos/{_GITHUB_REPO_OWNER}/{_GITHUB_REPO_NAME}/releases/assets/{asset['id']}", headers=headers)
+        response = conn.getresponse()
+        if response.status == 302:
+            download_url = response.getheader("Location")
+            conn.close()
+            conn = http.client.HTTPSConnection(download_url.split('/')[2])
+            conn.request("GET", download_url.split(download_url.split('/')[2])[1], headers=headers)
+            response = conn.getresponse()
+            file_name = os.path.join(tempfile.gettempdir(), asset["name"])
+            with open(file_name, "wb") as file:
+                file.write(response.read())
+            return file_name
+        else:
+            raise ValueError(f"Failed to download asset: {response.status}")
+    finally:
+        if conn:
+            conn.close()

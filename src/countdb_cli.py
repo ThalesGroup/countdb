@@ -100,25 +100,30 @@ def _run_operation(payload):
 
 
 def _install(version: str):
-    from deploy_lambda import deploy, function_exists
-    if function_exists():
-        deploy(version, update_config=True, update_code=True)
-    else:
-        deploy(version)
-        print("Creating database")
-        _run_operation({"operation": "init"})
-    return {"success": True}
+    try:
+        from deploy_lambda import deploy, function_exists
+        if function_exists():
+            deploy(version, update_config=True, update_code=True)
+        else:
+            deploy(version)
+            print("Creating database")
+            _run_operation({"operation": "init"})
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 def _uninstall():
     from deploy_lambda import uninstall_function, function_exists
-    if function_exists():
-        _run_operation({"operation": "drop-database"})
-        uninstall_function()
-        return {"success": True}
-    else:
-        return {"success": False, "error": "Function not found"}
-
+    try:
+        if function_exists():
+            _run_operation({"operation": "drop-database"})
+            uninstall_function()
+            return {"success": True}
+        else:
+            return {"success": False, "error": "Function not found"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 def _init_env(config_file: str) -> bool:
     init_evn_from_config_file(config_file)
@@ -134,6 +139,12 @@ def _init_env(config_file: str) -> bool:
         m = re.search("securityToken: ([^,]+),", creds_str, flags=re.MULTILINE)
         if m:
             os.environ["AWS_SECURITY_TOKEN"] = m.groups()[0]
+    else:
+        creds_file = os.path.join(os.getcwd(), "aws", "config")
+        if os.path.exists(creds_file):
+            print(f"Using creds file: {creds_file}")
+            os.environ["AWS_CONFIG_FILE"] = creds_file
+
 
     sts = boto3.client('sts')
     try:
