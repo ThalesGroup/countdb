@@ -252,7 +252,7 @@ def _compile_counter(counter: _Counter, day: str, temp_tables: Dict[str, str],
         if "value" in cols and cols["value"] not in ["integer", "bigint"]:
             errors.append(f"value data type should be integer. Got {cols['value']}")
     except Exception as e:
-        errors.append(f"SQL Error: {_format_athena_error(str(e))}")
+        errors.append(f"Counter: {counter.name}, SQL Error: {_format_athena_error(str(e))}")
     return errors
 
 
