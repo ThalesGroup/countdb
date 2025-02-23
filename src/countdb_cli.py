@@ -23,6 +23,8 @@ def _parse_admin_cli_input(argv) -> dict:
                         help="By default latest version is installed. It is possible to choose a version from github releases using the 'sources' keyword")
     parser.add_argument("--config", required=False, default=_DEFAULT_CONFIG_FILE,
                         help=f"Configuration file. Default file is {_DEFAULT_CONFIG_FILE}")
+    parser.add_argument("--verbose", required=False,
+                        help="Verbose output", action=argparse.BooleanOptionalAction, default=False)
     args_namespace = parser.parse_args(args=argv)
     args = {k: v for k, v in vars(args_namespace).items() if v}
     return args
@@ -47,6 +49,8 @@ def _parse_cli_input(argv) -> dict:
     parser.add_argument("--table", required=False, help="Init or Clear for a specific table")
     parser.add_argument("--config", required=False, default=_DEFAULT_CONFIG_FILE,
                         help=f"Configuration file. Default file is {_DEFAULT_CONFIG_FILE}")
+    parser.add_argument("--verbose", required=False,
+                        help="Verbose output", action=argparse.BooleanOptionalAction, default=False)
     args_namespace = parser.parse_args(args=argv)
     args = {k: v for k, v in vars(args_namespace).items() if v}
     return args
@@ -55,14 +59,15 @@ def _parse_cli_input(argv) -> dict:
 def _run_cli_command(command: dict):
     print(f"Function: {_get_function_name()}. Going to run command: {command}")
     operation = command["operation"]
+    verbose = command.get("verbose", False)
     if operation == "install":
-        result = _install(command["version"])
+        result = _install(command["version"], verbose)
     elif operation == "uninstall":
-        result = _uninstall()
+        result = _uninstall(verbose)
     elif operation == "upload":
-        result = _upload_dataset(command["dataset"])
+        result = _upload_dataset(command["dataset"], verbose)
     else:
-        result = _run_operation(command)
+        result = _run_operation(command, verbose)
     print(result)
 
 
@@ -70,36 +75,36 @@ def _get_function_name() -> str:
     return os.environ["FUNCTION_NAME"] if "FUNCTION_NAME" in os.environ else "countdb"
 
 
-def _invoke(payload):
+def _invoke(payload, verbose: bool):
     lambda_client = boto3.client("lambda", config=botocore.config.Config(read_timeout=900))
     response = lambda_client.invoke(
         FunctionName=_get_function_name(),
         Payload=payload, LogType="Tail")
     if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
         print(f"Error response from lambda: {response}", response)
-    else:
+    if verbose:
         print(f"{'=' * 40}LOGS{'=' * 40}\n{b64decode(response['LogResult']).decode('UTF8')}")
 
 
-def _upload_dataset(path: str):
+def _upload_dataset(path: str, verbose: bool):
     with open(path) as f:
         b64_conf = base64.b64encode(f.read().encode("utf-8"))
-    return _run_operation({"operation": "upload", "data": b64_conf.decode()})
+    return _run_operation({"operation": "upload", "data": b64_conf.decode()}, verbose)
 
 
-def _run_operation(payload):
+def _run_operation(payload, verbose: bool):
     if _local_mode():
         from lambda_function import lambda_handler
         return lambda_handler(payload, None)
     else:
         try:
-            return _invoke(bytes(json.dumps(payload), encoding="UTF8"))
+            return _invoke(bytes(json.dumps(payload), encoding="UTF8"), verbose)
         except ClientError as e:
             if "Function not found" in e.response["Message"]:
                 return f"Function not found: {_get_function_name()}"
 
 
-def _install(version: str):
+def _install(version: str, verbose: bool):
     try:
         from deploy_lambda import deploy, function_exists
         if function_exists():
@@ -107,17 +112,17 @@ def _install(version: str):
         else:
             deploy(version)
             print("Creating database")
-            _run_operation({"operation": "init"})
+            _run_operation({"operation": "init"}, verbose)
         return {"success": True, "version": version}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
-def _uninstall():
+def _uninstall(verbose: bool):
     from deploy_lambda import uninstall_function, function_exists
     try:
         if function_exists():
-            _run_operation({"operation": "drop-database"})
+            _run_operation({"operation": "drop-database"}, verbose)
             uninstall_function()
             return {"success": True}
         else:
