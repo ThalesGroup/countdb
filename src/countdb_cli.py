@@ -84,6 +84,7 @@ def _invoke(payload, verbose: bool):
         print(f"Error response from lambda: {response}", response)
     if verbose:
         print(f"{'=' * 40}LOGS{'=' * 40}\n{b64decode(response['LogResult']).decode('UTF8')}")
+    return response['Payload'].read().decode('utf-8')
 
 
 def _upload_dataset(path: str, verbose: bool):
