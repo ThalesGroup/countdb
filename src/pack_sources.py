@@ -6,7 +6,9 @@ _DEP_PACKAGE = os.path.join(tempfile.gettempdir(), "deployment_package.zip")
 
 
 def _get_root_dir() -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+    return os.path.abspath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+    )
 
 
 def _get_version():
@@ -23,7 +25,12 @@ def zip_sources() -> str:
         os.remove(_DEP_PACKAGE)
     with ZipFile(_DEP_PACKAGE, "w") as z_file:
         for f in os.listdir(_get_sources_dir()):
-            if f not in ["lambda_function.py", "countdb_cli.py", "deploy_lambda.py", "pack_sources.py"]:
+            if f not in [
+                "lambda_function.py",
+                "countdb_cli.py",
+                "deploy_lambda.py",
+                "pack_sources.py",
+            ]:
                 z_file.write(os.path.join(_get_sources_dir(), f), f)
         with open(os.path.join(_get_sources_dir(), "lambda_function.py"), "r") as f:
             lambda_main_code = f.read()

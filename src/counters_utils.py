@@ -20,10 +20,14 @@ class BasCountersCreator(TableCreator, ABC):
         }
 
 
-def get_existing_data(table_name: str,
-                      from_day: str, to_day: str, dataset_name: str = None,
-                      counter_ids: List[int] = None,
-                      session: Session = None) -> Dict[str, Set[str]]:
+def get_existing_data(
+    table_name: str,
+    from_day: str,
+    to_day: str,
+    dataset_name: str = None,
+    counter_ids: List[int] = None,
+    session: Session = None,
+) -> Dict[str, Set[str]]:
     creator = get_table_creator(table_name)
     sql = f"""SELECT DISTINCT dataset, {creator.partition_name()}
  FROM {creator.full_table_name()} 

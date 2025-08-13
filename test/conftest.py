@@ -35,4 +35,3 @@ def init_aws_creds():
     creds_file = os.path.join(get_project_folder(), "aws", "config")
     if os.path.exists(creds_file):
         os.environ["AWS_CONFIG_FILE"] = creds_file
-

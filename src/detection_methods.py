@@ -11,15 +11,15 @@ from s3_utils import folder_last_modified
 from s3_utils import get_root_folder
 from table_creator import TableCreator
 from table_creator import get_table_creator
-from utils import get_last_finished_week, \
-    get_last_finished_month, get_session, _MAX_WORKERS
+from utils import (
+    get_last_finished_week,
+    get_last_finished_month,
+    get_session,
+    _MAX_WORKERS,
+)
 
 _MAX_RSD = 0.3
-_MIN_DISTANCE_FROM_RSD = {
-    "day": 0.9,
-    "week": 0.4,
-    "month": 0.4
-}
+_MIN_DISTANCE_FROM_RSD = {"day": 0.9, "week": 0.4, "month": 0.4}
 _MIN_TREND_SLOPE = 0.1
 _DEFAULT_MIN_AVG = 10.0
 
@@ -27,76 +27,118 @@ _MIN_DATA_POINTS = {"day": 30, "week": 20, "month": 10}
 
 
 class DetectionMethod(Enum):
-    Peak = 0,
-    Trend = 1,
-    Pattern = 2,
+    Peak = (0,)
+    Trend = (1,)
+    Pattern = (2,)
 
 
-def detect_highlights(dataset_name: str = None, interval_type: str = None, from_day: str = None, to_day: str = None,
-                      method: str = None, override: bool = False):
+def detect_highlights(
+    dataset_name: str = None,
+    interval_type: str = None,
+    from_day: str = None,
+    to_day: str = None,
+    method: str = None,
+    override: bool = False,
+):
     """
-        Detects highlights for a specified dataset, interval type, and method within a given date range.
+    Detects highlights for a specified dataset, interval type, and method within a given date range.
 
-        Args:
-            dataset_name (str, optional): The name of the dataset to detect highlights for. If None, detects for all
-              datasets.
-            interval_type (str, optional): The type of interval for detection ('day', 'week', 'month'). If None,
-              detects for all intervals.
-            from_day (str, optional): The start date for the detection in the format 'YYYY-MM-DD'. If None, uses
-              default date range.
-            to_day (str, optional): The end date for the detection in the format 'YYYY-MM-DD'. If None, uses default
-              date range.
-            method (str, optional): The detection method to use ('Peak', 'Trend', 'Pattern'). If None, uses all methods.
-            override (bool, optional): If True, overrides existing data. Defaults to False.
+    Args:
+        dataset_name (str, optional): The name of the dataset to detect highlights for. If None, detects for all
+          datasets.
+        interval_type (str, optional): The type of interval for detection ('day', 'week', 'month'). If None,
+          detects for all intervals.
+        from_day (str, optional): The start date for the detection in the format 'YYYY-MM-DD'. If None, uses
+          default date range.
+        to_day (str, optional): The end date for the detection in the format 'YYYY-MM-DD'. If None, uses default
+          date range.
+        method (str, optional): The detection method to use ('Peak', 'Trend', 'Pattern'). If None, uses all methods.
+        override (bool, optional): If True, overrides existing data. Defaults to False.
 
-        Returns:
-            Dict: A dictionary containing the result of the detection operation, including the number of successful detections,
-                  the number of existing data points, the duration of the operation, and any errors encountered.
+    Returns:
+        Dict: A dictionary containing the result of the detection operation, including the number of successful detections,
+              the number of existing data points, the duration of the operation, and any errors encountered.
 
-        Raises:
-            Exception: If an error occurs during the detection process.
-        """
+    Raises:
+        Exception: If an error occurs during the detection process.
+    """
     start_time = datetime.now()
     session = get_session()
     errors = 0
     success = 0
     existing = 0
     existing_data = {} if override else _get_existing_data(dataset_name, session)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS,
-                                               thread_name_prefix="max_") as thread_pool:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=_MAX_WORKERS, thread_name_prefix="max_"
+    ) as thread_pool:
         futures = []
         for dataset in [dataset_name] if dataset_name else get_datasets(session).keys():
             get_dataset(dataset)
-            for d_method in [DetectionMethod[method]] if method else [DetectionMethod.Trend,
-                                                                      DetectionMethod.Peak,
-                                                                      DetectionMethod.Pattern]:
-                for interval in [interval_type] if interval_type else ["day", "week", "month"]:
+            for d_method in (
+                [DetectionMethod[method]]
+                if method
+                else [
+                    DetectionMethod.Trend,
+                    DetectionMethod.Peak,
+                    DetectionMethod.Pattern,
+                ]
+            ):
+                for interval in (
+                    [interval_type] if interval_type else ["day", "week", "month"]
+                ):
                     if from_day and to_day:
-                        thread_pool.submit(_run_highlight_task, dataset, interval, d_method.name, from_day, to_day)
+                        thread_pool.submit(
+                            _run_highlight_task,
+                            dataset,
+                            interval,
+                            d_method.name,
+                            from_day,
+                            to_day,
+                        )
                     else:
-                        if dataset_name in existing_data and interval in existing_data[dataset_name] and \
-                                d_method.name in existing_data[dataset_name][interval]:
-                            logging.info(f"Highlights data already exists. Dataset {dataset_name}, "
-                                         f"Interval: {interval}, Method: {d_method}")
+                        if (
+                            dataset_name in existing_data
+                            and interval in existing_data[dataset_name]
+                            and d_method.name in existing_data[dataset_name][interval]
+                        ):
+                            logging.info(
+                                f"Highlights data already exists. Dataset {dataset_name}, "
+                                f"Interval: {interval}, Method: {d_method}"
+                            )
                             existing += 1
                         else:
-                            thread_pool.submit(_run_highlight_task, dataset, interval, d_method.name, None, None)
+                            thread_pool.submit(
+                                _run_highlight_task,
+                                dataset,
+                                interval,
+                                d_method.name,
+                                None,
+                                None,
+                            )
         for f in concurrent.futures.as_completed(futures):
             if f.result():
                 success += 1
             else:
                 errors += 1
     elapsed_time = datetime.now() - start_time
-    result = {"operation": "detect", "status": "UP", "success": success,
-              "exists": existing, "duration": str(elapsed_time)}
+    result = {
+        "operation": "detect",
+        "status": "UP",
+        "success": success,
+        "exists": existing,
+        "duration": str(elapsed_time),
+    }
     if errors > 0:
         result["errors"] = errors
     logging.info(result)
     return result
 
 
-def _get_existing_data(dataset_name: str = None, session: Session = None) -> Dict[str, Dict[str, Set[str]]]:
+def _get_existing_data(
+    dataset_name: str = None, session: Session = None
+) -> Dict[str, Dict[str, Set[str]]]:
     prefix = f"{get_root_folder()}/tables/highlights/"
+
     if dataset_name:
         prefix += f"dataset={dataset_name}/"
     result = {}
@@ -110,9 +152,14 @@ def _get_existing_data(dataset_name: str = None, session: Session = None) -> Dic
             del data[0]
         interval = data[0].split("=")[1]
         last_modified = folders[folder]
-        if interval == "day" and last_modified == str(date.today()) or \
-                interval == "week" and last_modified >= get_last_finished_week() or \
-                interval == "month" and last_modified >= get_last_finished_month():
+        if (
+            interval == "day"
+            and last_modified == str(date.today())
+            or interval == "week"
+            and last_modified >= get_last_finished_week()
+            or interval == "month"
+            and last_modified >= get_last_finished_month()
+        ):
             method = data[1].split("=")[1]
             if current_dataset not in result:
                 result[current_dataset] = {}
@@ -122,16 +169,31 @@ def _get_existing_data(dataset_name: str = None, session: Session = None) -> Dic
     return result
 
 
-def _run_highlight_task(dataset: str, interval: str, method: str,
-                        from_day: Optional[str], to_day: Optional[str]) -> bool:
+def _run_highlight_task(
+    dataset: str,
+    interval: str,
+    method: str,
+    from_day: Optional[str],
+    to_day: Optional[str],
+) -> bool:
     try:
-        logging.info(f"detecting highlights for Dataset {dataset}, Interval: {interval}, Method: {method}")
-        get_table_creator("highlights").create_day(dataset, interval, session=get_session(),
-                                                   from_day=from_day, to_day=to_day, method=method)
+        logging.info(
+            f"detecting highlights for Dataset {dataset}, Interval: {interval}, Method: {method}"
+        )
+        get_table_creator("highlights").create_day(
+            dataset,
+            interval,
+            session=get_session(),
+            from_day=from_day,
+            to_day=to_day,
+            method=method,
+        )
         return True
     except Exception as e:
-        logging.exception(f"Error collecting data for Dataset {dataset}, Interval: {interval}, Method: {method}. "
-                          f"Error message: {str(e)}")
+        logging.exception(
+            f"Error collecting data for Dataset {dataset}, Interval: {interval}, Method: {method}. "
+            f"Error message: {str(e)}"
+        )
         return False
 
 
@@ -166,8 +228,13 @@ def _get_filter_by_interval_type(interval_type: str, from_day: str, to_day: str)
         raise Exception(f"Unknown interval type: {interval_type}")
 
 
-def _get_counters_data_sql(database_name: str, dataset: str, interval_type: str,
-                           from_day: str = None, to_day: str = None) -> str:
+def _get_counters_data_sql(
+    database_name: str,
+    dataset: str,
+    interval_type: str,
+    from_day: str = None,
+    to_day: str = None,
+) -> str:
     return f"""SELECT counter_id,  
   CASE 
     WHEN int_key1 IS NOT NULL AND int_key2 IS NOT NULL THEN ARRAY[int_key1, int_key2]
@@ -186,13 +253,23 @@ WHERE dataset = '{dataset}'
       AND {_get_filter_by_interval_type(interval_type, from_day, to_day)}"""
 
 
-def _detection_sql_by_interval_type(database_name: str, dataset: str, method: DetectionMethod,
-                                    interval_type: str, from_day: str = None, to_day: str = None):
-    counters_sql = _get_counters_data_sql(database_name, dataset, interval_type, from_day, to_day)
+def _detection_sql_by_interval_type(
+    database_name: str,
+    dataset: str,
+    method: DetectionMethod,
+    interval_type: str,
+    from_day: str = None,
+    to_day: str = None,
+):
+    counters_sql = _get_counters_data_sql(
+        database_name, dataset, interval_type, from_day, to_day
+    )
     return get_detection_method_sql(method, interval_type, counters_sql)
 
 
-def get_detection_method_sql(detection_method: DetectionMethod, interval_type: str, inner_sql: str) -> str:
+def get_detection_method_sql(
+    detection_method: DetectionMethod, interval_type: str, inner_sql: str
+) -> str:
     if detection_method == DetectionMethod.Peak:
         return _get_peak_detection_sql(inner_sql, interval_type)
     elif detection_method == DetectionMethod.Trend:
@@ -313,11 +390,23 @@ class HighlightsCreator(TableCreator):
     def table_folder(self) -> str:
         return "highlights"
 
-    def get_sql(self, dataset: str, interval_type: str, counter_id: int = None,
-                session: Session = None, **kwargs) -> str:
+    def get_sql(
+        self,
+        dataset: str,
+        interval_type: str,
+        counter_id: int = None,
+        session: Session = None,
+        **kwargs,
+    ) -> str:
         detection_method = DetectionMethod[kwargs["method"]]
-        return _detection_sql_by_interval_type(self.database_name(), dataset, detection_method, interval_type,
-                                               kwargs.get("from_day"), kwargs.get("to_day"))
+        return _detection_sql_by_interval_type(
+            self.database_name(),
+            dataset,
+            detection_method,
+            interval_type,
+            kwargs.get("from_day"),
+            kwargs.get("to_day"),
+        )
 
     def partition_name(self) -> Optional[str]:
         return "interval_type"
@@ -345,4 +434,3 @@ class HighlightsCreator(TableCreator):
 
     def life_cycle_days(self) -> int:
         return -1
-

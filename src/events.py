@@ -45,11 +45,23 @@ def _do_detect(args) -> Dict:
     counter_id = args["counter"] if "counter" in args else None
     override = "override" in args and str(args["override"]).lower() == "true"
     if method is None or method == "max":
-        detect_max_records(dataset_name=dataset, interval_type=interval, counter_id=counter_id, override=override,
-                           from_day=from_day, to_day=to_day)
+        detect_max_records(
+            dataset_name=dataset,
+            interval_type=interval,
+            counter_id=counter_id,
+            override=override,
+            from_day=from_day,
+            to_day=to_day,
+        )
     if method is None or method in ["Peak", "Trend", "Pattern"]:
-        detect_highlights(dataset_name=dataset, from_day=from_day, to_day=to_day,
-                          interval_type=interval, method=method, override=override)
+        detect_highlights(
+            dataset_name=dataset,
+            from_day=from_day,
+            to_day=to_day,
+            interval_type=interval,
+            method=method,
+            override=override,
+        )
 
     return {"operation": "detect", "status": "UP"}
 
@@ -76,8 +88,14 @@ def _do_aggregate(args) -> Dict:
     interval = args["interval"] if "interval" in args else None
     counter_id = int(args["counter"]) if "counter" in args else None
     override = "override" in args and str(args["override"]).lower() == "true"
-    return aggregate(from_day, to_day, dataset_name=args["dataset"] if "dataset" in args else None,
-                     interval_type=interval, override=override, counter_ids=[counter_id] if counter_id else None)
+    return aggregate(
+        from_day,
+        to_day,
+        dataset_name=args["dataset"] if "dataset" in args else None,
+        interval_type=interval,
+        override=override,
+        counter_ids=[counter_id] if counter_id else None,
+    )
 
 
 def _do_collect(args) -> Dict:
@@ -93,10 +111,13 @@ def _do_collect(args) -> Dict:
         from_day = None
         to_day = None
     override = "override" in args and str(args["override"]).lower() == "true"
-    return collect(from_day, to_day,
-                   dataset_name=args["dataset"] if "dataset" in args else None,
-                   override=override,
-                   counter_id=int(args["counter"]) if "counter" in args else None)
+    return collect(
+        from_day,
+        to_day,
+        dataset_name=args["dataset"] if "dataset" in args else None,
+        override=override,
+        counter_id=int(args["counter"]) if "counter" in args else None,
+    )
 
 
 def _do_update_dataset(event: dict):

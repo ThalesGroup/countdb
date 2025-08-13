@@ -6,12 +6,25 @@ from typing import NamedTuple, Dict, List, Optional
 from boto3 import Session
 
 from athena_utils import QueryStats, run_query, get_query_results
-from s3_utils import upload_content_to_s3, list_s3_folder_keys, get_s3_object_content, \
-    clear_s3_folder, get_session, list_s3_folders, delete_s3_object, get_root_folder
-from table_creator import get_table_creators, get_table_creator, get_database_name, _COUNTER_PARTITION_NAME
+from s3_utils import (
+    upload_content_to_s3,
+    list_s3_folder_keys,
+    get_s3_object_content,
+    clear_s3_folder,
+    get_session,
+    list_s3_folders,
+    delete_s3_object,
+    get_root_folder,
+)
+from table_creator import (
+    get_table_creators,
+    get_table_creator,
+    get_database_name,
+    _COUNTER_PARTITION_NAME,
+)
 from temp_table_utils import generate_temp_table_name
 
-_DAY_PH = '{day}'
+_DAY_PH = "{day}"
 
 
 class _Counter(NamedTuple):
@@ -78,16 +91,21 @@ def _dataset_from_json(dataset_json) -> _CounterDataset:
     dataset = _CounterDataset(dataset_json["dataset"])
     for counter_json in dataset_json["counters"]:
         c_id = counter_json["id"]
-        dataset.counters[c_id] = _Counter(c_id, counter_json["name"],
-                                          counter_json.get("aggregate", True),
-                                          counter_json.get("method", "sum"),
-                                          counter_json["sql"],
-                                          counter_json.get("value"),
-                                          counter_json.get("min-avg"),
-                                          counter_json.get("max-record", False),)
+        dataset.counters[c_id] = _Counter(
+            c_id,
+            counter_json["name"],
+            counter_json.get("aggregate", True),
+            counter_json.get("method", "sum"),
+            counter_json["sql"],
+            counter_json.get("value"),
+            counter_json.get("min-avg"),
+            counter_json.get("max-record", False),
+        )
     if "temp-tables" in dataset_json:
         for temp_table_name in dataset_json["temp-tables"]:
-            dataset.temp_tables[temp_table_name] = dataset_json["temp-tables"][temp_table_name]
+            dataset.temp_tables[temp_table_name] = dataset_json["temp-tables"][
+                temp_table_name
+            ]
     if "views" in dataset_json:
         for view_name in dataset_json["views"]:
             dataset.views[view_name] = dataset_json["views"][view_name]
@@ -102,8 +120,12 @@ def get_datasets_folder() -> str:
     return f"{get_root_folder()}/datasets"
 
 
-def _persist_dataset(dataset_name: str, json_data: str, session: Session = None) -> List[str]:
-    return upload_content_to_s3(f"{get_datasets_folder()}/{dataset_name}.json", json_data, session)
+def _persist_dataset(
+    dataset_name: str, json_data: str, session: Session = None
+) -> List[str]:
+    return upload_content_to_s3(
+        f"{get_datasets_folder()}/{dataset_name}.json", json_data, session
+    )
 
 
 def _validate_dataset_json(json_data) -> List[str]:
@@ -159,7 +181,9 @@ def _load_datasets_from_s3(session: Session = None):
 
 def _load_dataset_from_s3(name: str, session: Session = None) -> _CounterDataset:
     try:
-        return _load_dataset_by_key(f"{get_datasets_folder()}/{name}.json", session=session)
+        return _load_dataset_by_key(
+            f"{get_datasets_folder()}/{name}.json", session=session
+        )
     except Exception as e:
         raise Exception(f"Could not find dataset: {name}. Error: {str(e)}")
 
@@ -172,7 +196,9 @@ def _load_dataset_by_key(key: str, session: Session = None) -> _CounterDataset:
     return dataset
 
 
-def compile_dataset_counter(dataset_name: str, counter_id: int, query_stats: QueryStats) -> List[str]:
+def compile_dataset_counter(
+    dataset_name: str, counter_id: int, query_stats: QueryStats
+) -> List[str]:
     today = str(date.today())
     session = get_session()
     dataset = get_dataset(dataset_name, session)
@@ -180,37 +206,55 @@ def compile_dataset_counter(dataset_name: str, counter_id: int, query_stats: Que
     try:
         for temp_table in dataset.temp_tables:
             try:
-                temp_tables[temp_table] = _create_dataset_temp_table(dataset, today, query_stats,
-                                                                     temp_table, session=session)
+                temp_tables[temp_table] = _create_dataset_temp_table(
+                    dataset, today, query_stats, temp_table, session=session
+                )
             except Exception as e:
-                return [f"Error creating temp table: {temp_table}. Message: {_format_athena_error(str(e))}"]
+                return [
+                    f"Error creating temp table: {temp_table}. Message: {_format_athena_error(str(e))}"
+                ]
         for view in dataset.views:
             try:
                 _create_dataset_view(dataset, today, query_stats, view, session=session)
             except Exception as e:
-                return [f"Error creating view: {view}. Message: {_format_athena_error(str(e))}"]
+                return [
+                    f"Error creating view: {view}. Message: {_format_athena_error(str(e))}"
+                ]
 
         counter = dataset.counters[counter_id]
-        return _compile_counter(counter, today, temp_tables, query_stats, session=session)
+        return _compile_counter(
+            counter, today, temp_tables, query_stats, session=session
+        )
     finally:
         for temp_table in temp_tables.values():
             run_query(f"DROP TABLE IF EXISTS {temp_table}", session=session)
 
 
-def create_dataset_temp_tables(dataset: _CounterDataset, day: str, query_stats: QueryStats, session: Session = None):
+def create_dataset_temp_tables(
+    dataset: _CounterDataset, day: str, query_stats: QueryStats, session: Session = None
+):
     result = {}
     for temp_table in dataset.temp_tables:
-        temp_table_name = _create_dataset_temp_table(dataset, day, query_stats, temp_table, session=session)
+        temp_table_name = _create_dataset_temp_table(
+            dataset, day, query_stats, temp_table, session=session
+        )
         result[temp_table] = temp_table_name
     return result
 
 
-def _create_dataset_temp_table(dataset: _CounterDataset, day, query_stats, temp_table, session: Session = None) -> str:
+def _create_dataset_temp_table(
+    dataset: _CounterDataset, day, query_stats, temp_table, session: Session = None
+) -> str:
     temp_table_name = generate_temp_table_name(day)
-    logging.info(f"Going to create a temp table {temp_table} for dataset {dataset.name}. Name: {temp_table_name}")
+    logging.info(
+        f"Going to create a temp table {temp_table} for dataset {dataset.name}. Name: {temp_table_name}"
+    )
     temp_table_sql = replace_sql_place_holders(dataset.temp_tables[temp_table], day, {})
-    result = run_query(f"CREATE TABLE {temp_table_name} AS {temp_table_sql}", session=session,
-                       query_stats=query_stats)
+    result = run_query(
+        f"CREATE TABLE {temp_table_name} AS {temp_table_sql}",
+        session=session,
+        query_stats=query_stats,
+    )
     if result["Status"] != "SUCCEEDED":
         if "StateChangeReason" in result:
             raise Exception(result["StateChangeReason"])
@@ -229,7 +273,11 @@ def _create_dataset_view(dataset, day, query_stats, view, session: Session = Non
             raise Exception(result["StateChangeReason"])
         else:
             raise Exception(result)
-    result = run_query(f"CREATE VIEW {view_name} AS {temp_table_sql}", query_stats=query_stats, session=session)
+    result = run_query(
+        f"CREATE VIEW {view_name} AS {temp_table_sql}",
+        query_stats=query_stats,
+        session=session,
+    )
     if result["Status"] != "SUCCEEDED":
         if "StateChangeReason" in result:
             raise Exception(result["StateChangeReason"])
@@ -237,38 +285,62 @@ def _create_dataset_view(dataset, day, query_stats, view, session: Session = Non
             raise Exception(result)
 
 
-def _compile_counter(counter: _Counter, day: str, temp_tables: Dict[str, str],
-                     query_stats: QueryStats, session: Session = None) -> List[str]:
+def _compile_counter(
+    counter: _Counter,
+    day: str,
+    temp_tables: Dict[str, str],
+    query_stats: QueryStats,
+    session: Session = None,
+) -> List[str]:
     sql = replace_sql_place_holders(counter.sql, day, temp_tables)
     errors = []
     try:
         results = get_query_results(sql, query_stats, session=session)
-        cols = {c["Name"]: c["Type"] for c in results["ResultSet"]["ResultSetMetadata"]["ColumnInfo"]}
-        if "str_key" not in cols or "int_key" not in cols or "value" not in cols or len(cols) != 3:
-            errors.append(f"Expected 3 columns: int_key, str_key, value. Got {list(cols.keys())}")
+        cols = {
+            c["Name"]: c["Type"]
+            for c in results["ResultSet"]["ResultSetMetadata"]["ColumnInfo"]
+        }
+        if (
+            "str_key" not in cols
+            or "int_key" not in cols
+            or "value" not in cols
+            or len(cols) != 3
+        ):
+            errors.append(
+                f"Expected 3 columns: int_key, str_key, value. Got {list(cols.keys())}"
+            )
         for field in ["str_key", "int_key"]:
             if field in cols and cols[field] != "array":
                 errors.append(f"{field} data type should be array. Got {cols[field]}")
         if "value" in cols and cols["value"] not in ["integer", "bigint"]:
             errors.append(f"value data type should be integer. Got {cols['value']}")
     except Exception as e:
-        errors.append(f"Counter: {counter.name}, SQL Error: {_format_athena_error(str(e))}")
+        errors.append(
+            f"Counter: {counter.name}, SQL Error: {_format_athena_error(str(e))}"
+        )
     return errors
 
 
 def _format_athena_error(error: str) -> str:
     if "StartQueryExecution operation: " in error:
-        return error[error.find("StartQueryExecution operation: ") + len("StartQueryExecution operation: "):]
+        return error[
+            error.find("StartQueryExecution operation: ")
+            + len("StartQueryExecution operation: ") :
+        ]
     else:
         return error
 
 
 def validate_dataset(dataset: _CounterDataset) -> List[str]:
-    logging.info(f"Going to validate dataset: {dataset.name}. Counters number: {len(dataset.counters)}")
+    logging.info(
+        f"Going to validate dataset: {dataset.name}. Counters number: {len(dataset.counters)}"
+    )
     result = []
     for c in dataset.counters.values():
         if c.aggregate and c.aggregation_method not in ("sum", "max"):
-            result.append(f"Counter: {c.name} has an invalid aggregation method: {c.aggregation_method}")
+            result.append(
+                f"Counter: {c.name} has an invalid aggregation method: {c.aggregation_method}"
+            )
     query_stats = QueryStats()
     session = get_session()
 
@@ -276,25 +348,37 @@ def validate_dataset(dataset: _CounterDataset) -> List[str]:
     temp_tables = {}
     for temp_table in dataset.temp_tables:
         try:
-            temp_tables[temp_table] = _create_dataset_temp_table(dataset, today, query_stats, temp_table,
-                                                                 session=session)
+            temp_tables[temp_table] = _create_dataset_temp_table(
+                dataset, today, query_stats, temp_table, session=session
+            )
         except Exception as e:
-            return [f"Error creating temp table: {temp_table}. Message: {_format_athena_error(str(e))}"]
+            return [
+                f"Error creating temp table: {temp_table}. Message: {_format_athena_error(str(e))}"
+            ]
     for view in dataset.views:
         try:
             _create_dataset_view(dataset, today, query_stats, view, session=session)
         except Exception as e:
-            return [f"Error creating view: {view}. Message: {_format_athena_error(str(e))}"]
+            return [
+                f"Error creating view: {view}. Message: {_format_athena_error(str(e))}"
+            ]
     logging.info(f"Validating prerequisites: {len(dataset.prerequisites)}")
     for pre_req in dataset.prerequisites:
         try:
             pre_req = build_exists_query(pre_req, today)
-            pre_req_result = get_query_results(pre_req, session=session, query_stats=query_stats)
-            if len(pre_req_result["ResultSet"]["Rows"]) != 2 or \
-                    pre_req_result["ResultSet"]["Rows"][1]["Data"][0]["VarCharValue"] not in ["true", "false"]:
-                return [f"Error running prerequisite: {pre_req}. Result is in invalid format: {pre_req_result}"]
+            pre_req_result = get_query_results(
+                pre_req, session=session, query_stats=query_stats
+            )
+            if len(pre_req_result["ResultSet"]["Rows"]) != 2 or pre_req_result[
+                "ResultSet"
+            ]["Rows"][1]["Data"][0]["VarCharValue"] not in ["true", "false"]:
+                return [
+                    f"Error running prerequisite: {pre_req}. Result is in invalid format: {pre_req_result}"
+                ]
         except Exception as e:
-            return [f"Error running prerequisite: {pre_req}. Message: {_format_athena_error(str(e))}"]
+            return [
+                f"Error running prerequisite: {pre_req}. Message: {_format_athena_error(str(e))}"
+            ]
 
     for c in dataset.counters.values():
         logging.info(f"Validating counter. Id: {c.id}, Name: {c.name}")
@@ -308,9 +392,12 @@ def validate_dataset(dataset: _CounterDataset) -> List[str]:
     return result
 
 
-def clear_dataset_data(dataset_name: str, table_name: Optional[str],
-                       from_interval: Optional[str],
-                       counter_id: Optional[int]) -> int:
+def clear_dataset_data(
+    dataset_name: str,
+    table_name: Optional[str],
+    from_interval: Optional[str],
+    counter_id: Optional[int],
+) -> int:
     deleted = 0
     tables = [t.table_name() for t in get_table_creators() if t.table_name()]
     remove_dataset = table_name is None and from_interval is None
@@ -322,7 +409,9 @@ def clear_dataset_data(dataset_name: str, table_name: Optional[str],
         else:
             raise Exception(f"Unknown table: {table_name}")
     session = get_session()
-    for table_location in [t.table_location() for t in get_table_creators() if t.table_name() in tables]:
+    for table_location in [
+        t.table_location() for t in get_table_creators() if t.table_name() in tables
+    ]:
         folder = f"{table_location}/dataset={dataset_name}/"
         if from_interval is None:
             logging.info(f"Going to clear dataset table data. Folder: {folder}")
@@ -330,13 +419,17 @@ def clear_dataset_data(dataset_name: str, table_name: Optional[str],
         else:
             table_deleted = 0
             sub_folders = list_s3_folders(folder, session)
-            logging.info(f"Going to clear dataset table data. Folder: {folder}, from: {from_interval}, "
-                         f"Number of sub folders: {len(sub_folders) if sub_folders else 0}")
+            logging.info(
+                f"Going to clear dataset table data. Folder: {folder}, from: {from_interval}, "
+                f"Number of sub folders: {len(sub_folders) if sub_folders else 0}"
+            )
             for interval_folder in sorted(sub_folders) if sub_folders else []:
-                interval = interval_folder[interval_folder.rfind("=") + 1:-1]
+                interval = interval_folder[interval_folder.rfind("=") + 1 : -1]
                 if interval >= from_interval:
                     if counter_id is not None:
-                        interval_folder = f"{interval_folder}{_COUNTER_PARTITION_NAME}={counter_id}/"
+                        interval_folder = (
+                            f"{interval_folder}{_COUNTER_PARTITION_NAME}={counter_id}/"
+                        )
                     logging.info(f"Current folder: {interval_folder}")
                     table_deleted += clear_s3_folder(interval_folder)
         logging.info(f"Deleted {table_deleted} objects from folder: {folder}")

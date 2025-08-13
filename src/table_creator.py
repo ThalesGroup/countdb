@@ -6,7 +6,12 @@ from typing import Dict, Iterable, Optional
 from boto3 import Session
 
 from athena_utils import run_query, QueryStats
-from s3_utils import get_bucket, clear_s3_folder, get_root_folder, add_s3_life_cycle_config
+from s3_utils import (
+    get_bucket,
+    clear_s3_folder,
+    get_root_folder,
+    add_s3_life_cycle_config,
+)
 from temp_table_utils import generate_temp_table_name, get_temp_database_name
 from utils import get_session
 
@@ -20,11 +25,11 @@ def get_database_name() -> str:
 
 class TableCreator:
     """
-        Abstract base class for creating and managing external tables in AWS Athena.
+    Abstract base class for creating and managing external tables in AWS Athena.
 
-        This class provides a framework for defining the structure and behavior of external tables,
-        including methods for creating, managing, and querying these tables. Subclasses should
-        implement the abstract methods to specify the details for specific tables.
+    This class provides a framework for defining the structure and behavior of external tables,
+    including methods for creating, managing, and querying these tables. Subclasses should
+    implement the abstract methods to specify the details for specific tables.
     """
 
     @staticmethod
@@ -43,7 +48,14 @@ class TableCreator:
         raise NotImplementedError()
 
     @abstractmethod
-    def get_sql(self, dataset: str, day: str, counter_id: int = None, session: Session = None, **kwargs) -> str:
+    def get_sql(
+        self,
+        dataset: str,
+        day: str,
+        counter_id: int = None,
+        session: Session = None,
+        **kwargs,
+    ) -> str:
         raise NotImplementedError()
 
     def partition_name(self) -> Optional[str]:
@@ -75,12 +87,18 @@ class TableCreator:
         run_query(f"DROP TABLE IF EXISTS {self.full_table_name()}", session=session)
         run_query(self.external_table_sql(), session=session)
         logging.info(f"Repairing {self.full_table_name()}")
-        run_query(f"MSCK REPAIR TABLE {self.full_table_name()}", timeout=300, session=session)
+        run_query(
+            f"MSCK REPAIR TABLE {self.full_table_name()}", timeout=300, session=session
+        )
         logging.info(f"Creating views for {self.full_table_name()}")
         self.create_views()
         if self.life_cycle_days() != -1:
-            add_s3_life_cycle_config(get_bucket(), self.table_location(),
-                                     delete_days=self.life_cycle_days(), session=session)
+            add_s3_life_cycle_config(
+                get_bucket(),
+                self.table_location(),
+                delete_days=self.life_cycle_days(),
+                session=session,
+            )
 
     def create_views(self):
         pass
@@ -105,8 +123,10 @@ LOCATION '{self.get_full_location()}'"""
 
     def add_partition(self, dataset: str, day: str):
         value = self.partition_value(day)
-        run_query(f"ALTER TABLE {self.full_table_name()} ADD IF NOT EXISTS PARTITION (dataset='{dataset}',"
-                  f"{self.partition_name()}='{value}')")
+        run_query(
+            f"ALTER TABLE {self.full_table_name()} ADD IF NOT EXISTS PARTITION (dataset='{dataset}',"
+            f"{self.partition_name()}='{value}')"
+        )
 
     def _partition_path(self, dataset: str, day: str, **kwargs) -> str:
         par_value = self.partition_value(day)
@@ -116,21 +136,30 @@ LOCATION '{self.get_full_location()}'"""
     def _split_to_counters() -> bool:
         return True
 
-    def should_create(self, dataset: str, counter_id: int = None, session: Session = None) -> bool:
+    def should_create(
+        self, dataset: str, counter_id: int = None, session: Session = None
+    ) -> bool:
         """
-            Determines whether data should be created for a given dataset and counter ID.
+        Determines whether data should be created for a given dataset and counter ID.
 
-            Args:
-                dataset (str): The name of the dataset.
-                counter_id (int, optional): The ID of the counter. Defaults to None.
-                session (Session, optional): The boto3 session to use. Defaults to None.
+        Args:
+            dataset (str): The name of the dataset.
+            counter_id (int, optional): The ID of the counter. Defaults to None.
+            session (Session, optional): The boto3 session to use. Defaults to None.
 
-            Returns:
-                bool: True if the data should be created, False otherwise.
-            """
+        Returns:
+            bool: True if the data should be created, False otherwise.
+        """
         return True
 
-    def create_day(self, dataset: str, day: str, counter_id: int = None, session: Session = None, **kwargs) -> dict:
+    def create_day(
+        self,
+        dataset: str,
+        day: str,
+        counter_id: int = None,
+        session: Session = None,
+        **kwargs,
+    ) -> dict:
         if not self.should_create(dataset, counter_id, session):
             return {"result": "OK"}
         query_stats = QueryStats()
@@ -149,18 +178,24 @@ LOCATION '{self.get_full_location()}'"""
             sql = self.get_sql(dataset, self.partition_value(day), counter_id, **kwargs)
             if logging.getLogger().isEnabledFor(logging.DEBUG):
                 logging.debug(sql)
-            result = run_query(f"""
+            result = run_query(
+                f"""
 CREATE TABLE {temp_table_name} 
 WITH (external_location='s3://{get_bucket()}/{partition_path}', 
       format='PARQUET', {"" if counter_id is not None or not self._split_to_counters() else
             f"partitioned_by=ARRAY['{_COUNTER_PARTITION_NAME}'],"}
-      bucketed_by=ARRAY['counter_id'], bucket_count=1) AS {sql}""", query_stats, session=session)
+      bucketed_by=ARRAY['counter_id'], bucket_count=1) AS {sql}""",
+                query_stats,
+                session=session,
+            )
             if result["Status"] != "SUCCEEDED":
                 if "StateChangeReason" in result:
                     raise Exception(result["StateChangeReason"])
                 else:
                     raise Exception(result)
-            logging.info(f"Partition path: {partition_path}. Data scanned: {query_stats}")
+            logging.info(
+                f"Partition path: {partition_path}. Data scanned: {query_stats}"
+            )
         except Exception as e:
             logging.error(f"Error running query:\n{sql}")
             raise e
@@ -172,8 +207,13 @@ WITH (external_location='s3://{get_bucket()}/{partition_path}',
         self.add_partition(dataset, day)
         return {"result": "OK", "query_stats": str(query_stats)}
 
-    def _create_temp_tables(self, dataset_name: str, day: str,
-                            query_stats: QueryStats, session: Session = None) -> Dict[str, str]:
+    def _create_temp_tables(
+        self,
+        dataset_name: str,
+        day: str,
+        query_stats: QueryStats,
+        session: Session = None,
+    ) -> Dict[str, str]:
         pass
 
 
@@ -188,17 +228,22 @@ def _init_table_creators():
     if len(_table_creators) > 0:
         return
     from counters import DailyCountersCreator
+
     _register_table_creator(DailyCountersCreator())
     from counters_metadata import CountersMetadata
+
     _register_table_creator(CountersMetadata())
     from max_counters import DailyMaxCounters, WeeklyMaxCounters, MonthlyMaxCounters
+
     _register_table_creator(DailyMaxCounters())
     _register_table_creator(WeeklyMaxCounters())
     _register_table_creator(MonthlyMaxCounters())
     from aggregate import WeeklyCountersCreator, MonthlyCountersCreator
+
     _register_table_creator(WeeklyCountersCreator())
     _register_table_creator(MonthlyCountersCreator())
     from detection_methods import HighlightsCreator
+
     _register_table_creator(HighlightsCreator())
 
 
@@ -227,8 +272,12 @@ def create_db(args) -> Dict:
         tables.append(table_name)
     else:
         logging.info("Going to recreate DB")
-        run_query(f"CREATE DATABASE IF NOT EXISTS {get_database_name()}", session=session)
-        run_query(f"CREATE DATABASE IF NOT EXISTS {get_temp_database_name()}", session=session)
+        run_query(
+            f"CREATE DATABASE IF NOT EXISTS {get_database_name()}", session=session
+        )
+        run_query(
+            f"CREATE DATABASE IF NOT EXISTS {get_temp_database_name()}", session=session
+        )
         _init_table_creators()
         for t in _table_creators.values():
             t.recreate_external_table(session=session)

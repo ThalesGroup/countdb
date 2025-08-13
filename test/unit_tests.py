@@ -5,7 +5,14 @@ import pytest
 
 from countdb_cli import _parse_cli_input
 from pack_sources import zip_sources
-from utils import days_range, weeks_range, month_range, get_last_finished_week, get_last_finished_month, get_day_back
+from utils import (
+    days_range,
+    weeks_range,
+    month_range,
+    get_last_finished_week,
+    get_last_finished_month,
+    get_day_back,
+)
 
 
 class TestUtils:
@@ -43,7 +50,7 @@ class TestUtils:
     def test_last_finished_week(self):
         value = get_last_finished_week()
         assert len(value) == 10
-        value_date = datetime.strptime(value, '%Y-%m-%d')
+        value_date = datetime.strptime(value, "%Y-%m-%d")
         assert value_date.weekday() == 0
         value = get_last_finished_week("2024-05-15")
         assert value == "2024-05-06"
@@ -64,7 +71,7 @@ class TestZipSources:
     def test_zip_sources(self):
         zip_file = zip_sources()
         assert zip_file.endswith(".zip")
-        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_file, "r") as zip_ref:
             file_names = zip_ref.namelist()
             assert len(file_names) > 0
             assert "lambda_function.py" in file_names

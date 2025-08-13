@@ -17,7 +17,6 @@ _GITHUB_REPO_OWNER = "ThalesGroup"
 _GITHUB_REPO_NAME = "countdb"
 
 
-
 def _generate_random_id() -> str:
     return str(randint(1_000_000, 9_999_999))
 
@@ -35,29 +34,27 @@ def _create_rule(rule_name: str, cron_exp: str, operation: str, interval: str = 
     rule_name = f"{_get_function_name()}-{rule_name}"
     client.put_rule(
         Name=rule_name,
-        ScheduleExpression=f'cron({cron_exp})',
-        State='ENABLED',
+        ScheduleExpression=f"cron({cron_exp})",
+        State="ENABLED",
     )
     json_data = {"operation": operation}
     if interval:
         json_data["interval"] = interval
-    client.put_targets(Rule=rule_name,
-                       Targets=[
-                           {
-                               "Arn": lambda_arn,
-                               "Id": rule_name,
-                               "Input": json.dumps(json_data)
-                           }]
-                       )
+    client.put_targets(
+        Rule=rule_name,
+        Targets=[{"Arn": lambda_arn, "Id": rule_name, "Input": json.dumps(json_data)}],
+    )
     lambda_client = boto3.client("lambda")
     sts_client = boto3.client("sts")
     region = os.environ["AWS_DEFAULT_REGION"]
     account_id = sts_client.get_caller_identity()["Account"]
-    lambda_client.add_permission(FunctionName=lambda_arn,
-                                 StatementId=_generate_random_id(),
-                                 Action='lambda:InvokeFunction',
-                                 Principal='events.amazonaws.com',
-                                 SourceArn=f"arn:aws:events:{region}:{account_id}:rule/{rule_name}")
+    lambda_client.add_permission(
+        FunctionName=lambda_arn,
+        StatementId=_generate_random_id(),
+        Action="lambda:InvokeFunction",
+        Principal="events.amazonaws.com",
+        SourceArn=f"arn:aws:events:{region}:{account_id}:rule/{rule_name}",
+    )
 
 
 def deploy(version: str, update_config: bool = False, update_code: bool = True):
@@ -83,12 +80,10 @@ def deploy(version: str, update_config: bool = False, update_code: bool = True):
                 Description=description,
                 Environment=env_data,
                 Timeout=lambda_timeout,
-                Code={
-                    "ZipFile": file.read()
-                },
+                Code={"ZipFile": file.read()},
                 Handler="lambda_function.lambda_handler",
                 Publish=True,
-                Architectures=["arm64"]
+                Architectures=["arm64"],
             )
         _update_scheduling()
         return
@@ -148,7 +143,7 @@ def _update_scheduling():
 def _clear_scheduling():
     client = boto3.client("events")
     response = client.list_rule_names_by_target(TargetArn=_get_lambda_arn())
-    rules = response['RuleNames']
+    rules = response["RuleNames"]
     print(f"Going to delete rules: {rules}")
     for rule in rules:
         targets = client.list_targets_by_rule(Rule=rule)["Targets"]
@@ -163,9 +158,11 @@ def _clear_scheduling():
         for sid in statement_ids:
             lambda_client.remove_permission(FunctionName=function_name, StatementId=sid)
 
+
 def _get_package(pacakge_version: str) -> str:
     if pacakge_version == "sources":
         from pack_sources import zip_sources
+
         return zip_sources()
     elif pacakge_version == "latest":
         return _download_sources("latest")
@@ -182,7 +179,7 @@ def _github_api_request(url: str = None) -> dict:
         conn = http.client.HTTPSConnection("api.github.com")
         headers = {
             "User-Agent": "Python http.client",
-            "Accept": "application/vnd.github.v3+json"
+            "Accept": "application/vnd.github.v3+json",
         }
         if "GITHUB_TOKEN" in os.environ:
             headers["Authorization"] = f"token {os.environ['GITHUB_TOKEN']}"
@@ -194,10 +191,12 @@ def _github_api_request(url: str = None) -> dict:
         if response.status == 404:
             raise ValueError("Repository not found or you do not have access.")
         elif response.status == 403:
-            if response.getheader('X-RateLimit-Remaining') == '0':
+            if response.getheader("X-RateLimit-Remaining") == "0":
                 raise ValueError("API rate limit exceeded.")
             else:
-                raise ValueError("Access forbidden. Check your token permissions or repository access.")
+                raise ValueError(
+                    "Access forbidden. Check your token permissions or repository access."
+                )
         elif response.status != 200:
             raise ValueError(f"Unknown error: {response.read().decode()}")
         else:
@@ -206,9 +205,11 @@ def _github_api_request(url: str = None) -> dict:
         if conn:
             conn.close()
 
+
 def _get_versions() -> List[str]:
     releases = _github_api_request("releases")
     return [r["tag_name"] for r in releases]
+
 
 def _download_sources(version: str):
     if version == "latest":
@@ -222,17 +223,25 @@ def _download_sources(version: str):
         conn = http.client.HTTPSConnection("api.github.com")
         headers = {
             "User-Agent": "Python http.client",
-            "Accept": "application/octet-stream"
+            "Accept": "application/octet-stream",
         }
         if "GITHUB_TOKEN" in os.environ:
             headers["Authorization"] = f"token {os.environ['GITHUB_TOKEN']}"
-        conn.request("GET", f"/repos/{_GITHUB_REPO_OWNER}/{_GITHUB_REPO_NAME}/releases/assets/{asset['id']}", headers=headers)
+        conn.request(
+            "GET",
+            f"/repos/{_GITHUB_REPO_OWNER}/{_GITHUB_REPO_NAME}/releases/assets/{asset['id']}",
+            headers=headers,
+        )
         response = conn.getresponse()
         if response.status == 302:
             download_url = response.getheader("Location")
             conn.close()
-            conn = http.client.HTTPSConnection(download_url.split('/')[2])
-            conn.request("GET", download_url.split(download_url.split('/')[2])[1], headers=headers)
+            conn = http.client.HTTPSConnection(download_url.split("/")[2])
+            conn.request(
+                "GET",
+                download_url.split(download_url.split("/")[2])[1],
+                headers=headers,
+            )
             response = conn.getresponse()
             file_name = os.path.join(tempfile.gettempdir(), asset["name"])
             with open(file_name, "wb") as file:

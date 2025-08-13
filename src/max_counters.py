@@ -10,19 +10,37 @@ from athena_utils import get_query_results
 from counters import BasCountersCreator
 from datasets import get_dataset, get_datasets
 from table_creator import get_table_creator
-from utils import get_session, get_yesterday, get_last_finished_week, \
-    get_last_finished_month, _MAX_WORKERS
+from utils import (
+    get_session,
+    get_yesterday,
+    get_last_finished_week,
+    get_last_finished_month,
+    _MAX_WORKERS,
+)
 
 
 class MaxCounters(BasCountersCreator, ABC):
-    def get_sql(self, dataset: str, day: str, counter_id: int = None, session: Session = None, **kwargs) -> str:
-        last_max_interval_dict = self._get_last_max_interval(day, dataset, counter_id, session)
+    def get_sql(
+        self,
+        dataset: str,
+        day: str,
+        counter_id: int = None,
+        session: Session = None,
+        **kwargs,
+    ) -> str:
+        last_max_interval_dict = self._get_last_max_interval(
+            day, dataset, counter_id, session
+        )
         logging.info(f"Last max interval: {last_max_interval_dict}")
-        last_max_interval = last_max_interval_dict["last_interval"] if last_max_interval_dict else None
+        last_max_interval = (
+            last_max_interval_dict["last_interval"] if last_max_interval_dict else None
+        )
         if last_max_interval is None:
             max_last_seen_sql = 0
         else:
-            max_last_seen_sql = f"{self._date_diff(f"'{last_max_interval}'", f"'{day}'")} + last_seen"
+            max_last_seen_sql = (
+                f"{self._date_diff(f"'{last_max_interval}'", f"'{day}'")} + last_seen"
+            )
         return f"""
 WITH data AS (
   -- Find keys and max values for counter during the period
@@ -110,24 +128,34 @@ WHERE
     def _max_not_seen_intervals(self) -> int:
         raise NotImplementedError()
 
-    def _get_last_max_interval(self, day: str, dataset: str, counter_id: int,
-                               session: Session = None) -> Optional[Dict]:
-        results = get_query_results(f"""
+    def _get_last_max_interval(
+        self, day: str, dataset: str, counter_id: int, session: Session = None
+    ) -> Optional[Dict]:
+        results = get_query_results(
+            f"""
 SELECT MAX({self.partition_name()}) AS interval, 
        ARBITRARY(int_key1) AS int_key1, ARBITRARY(int_key2) AS int_key2,
        ARBITRARY(str_key1) AS str_key1, ARBITRARY(str_key2) AS str_key2
 FROM {self.full_table_name()}
 WHERE {self.partition_name()} < '{day}'
       AND dataset = '{dataset}'
-      AND counter_id = {counter_id}""", session=session)
+      AND counter_id = {counter_id}""",
+            session=session,
+        )
 
         data = results["ResultSet"]["Rows"][1]["Data"]
         if "VarCharValue" in data[0] and len(data[0]["VarCharValue"][0]) > 0:
-            result = {"last_interval": data[0]["VarCharValue"],
-                      "int_key1": "VarCharValue" in data[1] and len(data[1]["VarCharValue"][0]) > 0,
-                      "int_key2": "VarCharValue" in data[2] and len(data[2]["VarCharValue"][0]) > 0,
-                      "str_key1": "VarCharValue" in data[3] and len(data[3]["VarCharValue"][0]) > 0,
-                      "str_key2": "VarCharValue" in data[4] and len(data[4]["VarCharValue"][0]) > 0}
+            result = {
+                "last_interval": data[0]["VarCharValue"],
+                "int_key1": "VarCharValue" in data[1]
+                and len(data[1]["VarCharValue"][0]) > 0,
+                "int_key2": "VarCharValue" in data[2]
+                and len(data[2]["VarCharValue"][0]) > 0,
+                "str_key1": "VarCharValue" in data[3]
+                and len(data[3]["VarCharValue"][0]) > 0,
+                "str_key2": "VarCharValue" in data[4]
+                and len(data[4]["VarCharValue"][0]) > 0,
+            }
             return result
         else:
             return None
@@ -257,8 +285,9 @@ class MonthlyMaxCounters(MaxCounters):
         return get_last_finished_month(to_day)
 
 
-def _get_max_existing_data(creator: MaxCounters, dataset: str,
-                           counter_id: int, interval: str, session: Session) -> Dict[str, Dict[int, bool]]:
+def _get_max_existing_data(
+    creator: MaxCounters, dataset: str, counter_id: int, interval: str, session: Session
+) -> Dict[str, Dict[int, bool]]:
     sql = f"""WITH source AS (
 SELECT DISTINCT dataset, counter_id 
 FROM {creator.database_name()}.{creator.source_table()} WHERE {creator.partition_name()} = '{interval}' 
@@ -295,32 +324,57 @@ def _get_max_table_by_interval_type(interval_type: str) -> str:
         raise Exception(f"Unknown interval type: {interval_type}")
 
 
-def detect_max_records(dataset_name: str = None, interval_type: str = None,
-                       override: bool = False, counter_id: int = None,
-                       from_day: str = None, to_day: str = None):
+def detect_max_records(
+    dataset_name: str = None,
+    interval_type: str = None,
+    override: bool = False,
+    counter_id: int = None,
+    from_day: str = None,
+    to_day: str = None,
+):
     start_time = datetime.now()
     session = get_session()
     errors = 0
     success = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS,
-                                               thread_name_prefix="max_") as thread_pool:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=_MAX_WORKERS, thread_name_prefix="max_"
+    ) as thread_pool:
         futures = []
-        for cur_interval_type in [interval_type] if interval_type else ["day", "week", "month"]:
+        for cur_interval_type in (
+            [interval_type] if interval_type else ["day", "week", "month"]
+        ):
             # noinspection PyTypeChecker
-            creator: MaxCounters = get_table_creator(_get_max_table_by_interval_type(cur_interval_type))
+            creator: MaxCounters = get_table_creator(
+                _get_max_table_by_interval_type(cur_interval_type)
+            )
             interval = creator.get_max_interval(to_day)
-            existing_data = _get_max_existing_data(creator, dataset_name, counter_id, interval, session)
-            for d_name in [dataset_name] if dataset_name else get_datasets(session).keys():
+            existing_data = _get_max_existing_data(
+                creator, dataset_name, counter_id, interval, session
+            )
+            for d_name in (
+                [dataset_name] if dataset_name else get_datasets(session).keys()
+            ):
                 cur_dataset = get_dataset(name=d_name, session=session)
-                for c_id in get_dataset(d_name, session).counters if counter_id is None else [counter_id]:
+                for c_id in (
+                    get_dataset(d_name, session).counters
+                    if counter_id is None
+                    else [counter_id]
+                ):
                     if cur_dataset.counters[c_id].max_record:
                         log_key = f"dataset: {d_name}, {creator.partition_name()}: {interval}, Counter: {c_id}"
                         if d_name in existing_data and c_id in existing_data[d_name]:
                             if existing_data[d_name][c_id] and not override:
                                 logging.info(f"Max values data exists for {log_key}")
                             else:
-                                thread_pool.submit(_run_max_task, log_key,
-                                                   cur_interval_type, interval, d_name, c_id, from_day)
+                                thread_pool.submit(
+                                    _run_max_task,
+                                    log_key,
+                                    cur_interval_type,
+                                    interval,
+                                    d_name,
+                                    c_id,
+                                    from_day,
+                                )
                         else:
                             logging.info(f"Source data not found for {log_key}")
         for f in concurrent.futures.as_completed(futures):
@@ -329,21 +383,39 @@ def detect_max_records(dataset_name: str = None, interval_type: str = None,
             else:
                 errors += 1
     elapsed_time = datetime.now() - start_time
-    result = {"operation": "max", "status": "UP", "success": success, "duration": str(elapsed_time)}
+    result = {
+        "operation": "max",
+        "status": "UP",
+        "success": success,
+        "duration": str(elapsed_time),
+    }
     logging.info(result)
     if errors > 0:
         result["errors"] = errors
     return result
 
 
-def _run_max_task(log_key: str, interval_type: str, interval: str,
-                  dataset: str, counter_id: int, from_day: str) -> bool:
+def _run_max_task(
+    log_key: str,
+    interval_type: str,
+    interval: str,
+    dataset: str,
+    counter_id: int,
+    from_day: str,
+) -> bool:
     try:
         logging.info(f"detecting max values for {log_key}")
         creator = get_table_creator(_get_max_table_by_interval_type(interval_type))
-        creator.create_day(dataset, interval, counter_id=counter_id, session=get_session(), from_day=from_day)
+        creator.create_day(
+            dataset,
+            interval,
+            counter_id=counter_id,
+            session=get_session(),
+            from_day=from_day,
+        )
         return True
     except Exception as e:
-        logging.exception(f"Error collecting data for {log_key}. Error message: {str(e)}")
+        logging.exception(
+            f"Error collecting data for {log_key}. Error message: {str(e)}"
+        )
         return False
-
