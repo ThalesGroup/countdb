@@ -1,8 +1,17 @@
-name: Run Unit Tests
-on: [push, workflow_dispatch]
+name: Run Integration Tests
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read  # To read the repository contents (for `actions/checkout`)
+      id-token: write  # To use OIDC for accessing resources (if needed)
+      actions: read  # Allow the use of actions like `actions/cache`
 
     steps:
       - name: Checkout
@@ -33,12 +42,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r test/requirements.txt            
 
-      - name: Run unit tests
-        run: |
-          source .venv/bin/activate
-          PYTHONPATH=src python -m pytest --color=yes test/unit_tests.py
+      - name: Get AWS Permissions
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/count-db-run-integration-tests
+          aws-region: us-east-1
 
-      - name: Run aws mock unit tests
+      - name: Run integration tests
         run: |
           source .venv/bin/activate          
-          PYTHONPATH=src python -m pytest --color=yes --log-cli-level=INFO test/unit_aws_mock_tests.py --dist=loadgroup -n 3
+          PYTHONPATH=src python -m pytest --color=yes --log-cli-level=INFO --durations=0 test/integration_tests.py
