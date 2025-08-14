@@ -67,7 +67,9 @@ def detect_highlights(
     errors = 0
     success = 0
     existing = 0
-    existing_data = {} if override else _get_existing_data(dataset_name, session)
+    existing_data = (
+        {} if override else _get_existing_data(dataset_name, interval_type, session)
+    )
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=_MAX_WORKERS, thread_name_prefix="max_"
     ) as thread_pool:
@@ -135,12 +137,14 @@ def detect_highlights(
 
 
 def _get_existing_data(
-    dataset_name: str = None, session: Session = None
+    dataset_name: str = None, interval_type: str = None, session: Session = None
 ) -> Dict[str, Dict[str, Set[str]]]:
     prefix = f"{get_root_folder()}/tables/highlights/"
 
     if dataset_name:
         prefix += f"dataset={dataset_name}/"
+    if interval_type:
+        prefix += f"interval_type={interval_type}/"
     result = {}
     folders = folder_last_modified(prefix, session=session)
     for folder in folders:
@@ -150,7 +154,11 @@ def _get_existing_data(
         else:
             current_dataset = data[0].split("=")[1]
             del data[0]
-        interval = data[0].split("=")[1]
+        if interval_type:
+            interval = interval_type
+        else:
+            interval = data[0].split("=")[1]
+            del data[0]
         last_modified = folders[folder]
         if (
             interval == "day"
@@ -160,7 +168,7 @@ def _get_existing_data(
             or interval == "month"
             and last_modified >= get_last_finished_month()
         ):
-            method = data[1].split("=")[1]
+            method = data[0].split("=")[1]
             if current_dataset not in result:
                 result[current_dataset] = {}
             if interval not in result[current_dataset]:
@@ -433,4 +441,4 @@ class HighlightsCreator(TableCreator):
         return f"{path}/method={kwargs['method']}"
 
     def life_cycle_days(self) -> int:
-        return -1
+        return 60
