@@ -104,7 +104,7 @@ It is also recommended making the alias permanent. For example, the above comman
 The CLI invokes the CountDB Lambda function. To use it you need AWS authentication with the relevant permissions. There are multiple options for authentication. You can run the CLI from an instance with a matching instance role, set environment variables, use a local file and more. You can find all the options under https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html
 
 ## Installation
-It is possible to installed a released version, or install from sources. By default the latest released version is installed. To install the latest version use the following command:
+It is possible to install a released version, or install from sources. By default, the latest released version is installed. To install the latest version use the following command:
 ```countdb admin install```
 
 To install a specific version use the following command:

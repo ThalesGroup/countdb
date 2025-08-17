@@ -7,7 +7,7 @@ from typing import Dict, Optional, Set
 from boto3 import Session
 
 from datasets import get_datasets, get_dataset
-from s3_utils import folder_last_modified
+from s3_utils import folder_last_modified, list_s3_folder_keys, upload_content_to_s3
 from s3_utils import get_root_folder
 from table_creator import TableCreator
 from table_creator import get_table_creator
@@ -103,10 +103,11 @@ def detect_highlights(
                             and interval in existing_data[dataset_name]
                             and d_method.name in existing_data[dataset_name][interval]
                         ):
-                            logging.info(
-                                f"Highlights data already exists. Dataset {dataset_name}, "
-                                f"Interval: {interval}, Method: {d_method}"
-                            )
+                            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                logging.debug(
+                                    f"Highlights data already exists. Dataset {dataset_name}, "
+                                    f"Interval: {interval}, Method: {d_method}"
+                                )
                             existing += 1
                         else:
                             thread_pool.submit(
@@ -143,37 +144,39 @@ def _get_existing_data(
 
     if dataset_name:
         prefix += f"dataset={dataset_name}/"
-    if interval_type:
-        prefix += f"interval_type={interval_type}/"
+        if interval_type:
+            prefix += f"interval_type={interval_type}/"
     result = {}
     folders = folder_last_modified(prefix, session=session)
     for folder in folders:
         data = folder.split("/")[:-1]
+        interval = None
         if dataset_name:
             current_dataset = dataset_name
+            if interval_type:
+                interval = interval_type
         else:
             current_dataset = data[0].split("=")[1]
             del data[0]
-        if interval_type:
-            interval = interval_type
-        else:
+        if not interval:
             interval = data[0].split("=")[1]
             del data[0]
         last_modified = folders[folder]
-        if (
-            interval == "day"
-            and last_modified == str(date.today())
-            or interval == "week"
-            and last_modified >= get_last_finished_week()
-            or interval == "month"
-            and last_modified >= get_last_finished_month()
-        ):
-            method = data[0].split("=")[1]
-            if current_dataset not in result:
-                result[current_dataset] = {}
-            if interval not in result[current_dataset]:
-                result[current_dataset][interval] = set()
-            result[current_dataset][interval].add(method)
+        if interval_type is None or interval_type == interval:
+            if (
+                interval == "day"
+                and last_modified == str(date.today())
+                or interval == "week"
+                and last_modified >= get_last_finished_week()
+                or interval == "month"
+                and last_modified >= get_last_finished_month()
+            ):
+                method = data[0].split("=")[1]
+                if current_dataset not in result:
+                    result[current_dataset] = {}
+                if interval not in result[current_dataset]:
+                    result[current_dataset][interval] = set()
+                result[current_dataset][interval].add(method)
     return result
 
 
@@ -188,14 +191,22 @@ def _run_highlight_task(
         logging.info(
             f"detecting highlights for Dataset {dataset}, Interval: {interval}, Method: {method}"
         )
-        get_table_creator("highlights").create_day(
+        session = get_session()
+        result = get_table_creator("highlights").create_day(
             dataset,
             interval,
-            session=get_session(),
+            session=session,
             from_day=from_day,
             to_day=to_day,
             method=method,
         )
+        has_data = (
+            len(list_s3_folder_keys(result["partition_path"], session=session)) > 0
+        )
+        if not has_data:
+            upload_content_to_s3(
+                f"{result['partition_path']}/_SUCCESS_NO_DATA", "", session=session
+            )
         return True
     except Exception as e:
         logging.exception(

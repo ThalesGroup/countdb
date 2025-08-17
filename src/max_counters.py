@@ -336,6 +336,7 @@ def detect_max_records(
     session = get_session()
     errors = 0
     success = 0
+    exists = 0
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=_MAX_WORKERS, thread_name_prefix="max_"
     ) as thread_pool:
@@ -364,7 +365,11 @@ def detect_max_records(
                         log_key = f"dataset: {d_name}, {creator.partition_name()}: {interval}, Counter: {c_id}"
                         if d_name in existing_data and c_id in existing_data[d_name]:
                             if existing_data[d_name][c_id] and not override:
-                                logging.info(f"Max values data exists for {log_key}")
+                                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                                    logging.debug(
+                                        f"Max values data exists for {log_key}"
+                                    )
+                                exists += 1
                             else:
                                 thread_pool.submit(
                                     _run_max_task,
@@ -387,6 +392,7 @@ def detect_max_records(
         "operation": "max",
         "status": "UP",
         "success": success,
+        "exists": exists,
         "duration": str(elapsed_time),
     }
     logging.info(result)

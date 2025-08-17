@@ -205,7 +205,11 @@ WITH (external_location='s3://{get_bucket()}/{partition_path}',
                 for temp_table in temp_tables.values():
                     run_query(f"DROP TABLE IF EXISTS {temp_table}", session=session)
         self.add_partition(dataset, day)
-        return {"result": "OK", "query_stats": str(query_stats)}
+        return {
+            "result": "OK",
+            "query_stats": str(query_stats),
+            "partition_path": partition_path,
+        }
 
     def _create_temp_tables(
         self,

@@ -192,7 +192,8 @@ def _load_dataset_by_key(key: str, session: Session = None) -> _CounterDataset:
     obj_data = get_s3_object_content(key, session)
     dataset = _dataset_from_str(obj_data)
     _DATASETS[dataset.name] = dataset
-    logging.info(f"Loaded dataset: {dataset.name}")
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f"Loaded dataset: {dataset.name}")
     return dataset
 
 

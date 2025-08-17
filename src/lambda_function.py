@@ -6,6 +6,10 @@ from events import handle_event
 # noinspection PyUnusedLocal
 def lambda_handler(event, context):
     logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger("botocore.credentials").addFilter(
+        lambda record: "Found credentials in environment variables"
+        not in record.getMessage()
+    )
     logging.info("Code version: $VERSION$")
     try:
         result = handle_event(event)
