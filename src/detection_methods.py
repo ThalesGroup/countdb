@@ -6,7 +6,7 @@ from typing import Dict, Optional, Set
 
 from boto3 import Session
 
-from datasets import get_datasets, get_dataset
+from datasets import get_datasets, get_dataset, _CounterDataset
 from s3_utils import folder_last_modified, list_s3_folder_keys, upload_content_to_s3
 from s3_utils import get_root_folder
 from table_creator import TableCreator
@@ -75,16 +75,8 @@ def detect_highlights(
     ) as thread_pool:
         futures = []
         for dataset in [dataset_name] if dataset_name else get_datasets(session).keys():
-            get_dataset(dataset)
-            for d_method in (
-                [DetectionMethod[method]]
-                if method
-                else [
-                    DetectionMethod.Trend,
-                    DetectionMethod.Peak,
-                    DetectionMethod.Pattern,
-                ]
-            ):
+            d = get_dataset(dataset)
+            for d_method in _get_detection_methods(method, d):
                 for interval in (
                     [interval_type] if interval_type else ["day", "week", "month"]
                 ):
@@ -99,13 +91,13 @@ def detect_highlights(
                         )
                     else:
                         if (
-                            dataset_name in existing_data
-                            and interval in existing_data[dataset_name]
-                            and d_method.name in existing_data[dataset_name][interval]
+                            dataset in existing_data
+                            and interval in existing_data[dataset]
+                            and d_method.name in existing_data[dataset][interval]
                         ):
                             if logging.getLogger().isEnabledFor(logging.DEBUG):
                                 logging.debug(
-                                    f"Highlights data already exists. Dataset {dataset_name}, "
+                                    f"Highlights data already exists. Dataset {dataset}, "
                                     f"Interval: {interval}, Method: {d_method}"
                                 )
                             existing += 1
@@ -135,6 +127,21 @@ def detect_highlights(
         result["errors"] = errors
     logging.info(result)
     return result
+
+
+def _get_detection_methods(
+    method: Optional[str], dataset: _CounterDataset
+) -> Set[DetectionMethod]:
+    if method:
+        return {DetectionMethod[method]}
+    elif len(dataset.detection_methods) > 0:
+        return {DetectionMethod[m] for m in dataset.detection_methods}
+    else:
+        return {
+            DetectionMethod.Trend,
+            DetectionMethod.Peak,
+            DetectionMethod.Pattern,
+        }
 
 
 def _get_existing_data(

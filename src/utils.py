@@ -4,7 +4,7 @@ from typing import Generator
 import boto3
 from boto3 import Session
 
-_MAX_WORKERS = 3
+_MAX_WORKERS = 1
 
 
 def get_session(session: Session = None) -> boto3.Session:

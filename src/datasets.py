@@ -57,6 +57,7 @@ class _CounterDataset:
         self.temp_tables: Dict[str, str] = {}
         self.views: Dict[str, str] = {}
         self.prerequisites: List[str] = []
+        self.detection_methods: List[str] = []
 
 
 _DATASETS: Dict[str, _CounterDataset] = {}
@@ -113,6 +114,10 @@ def _dataset_from_json(dataset_json) -> _CounterDataset:
     if "prerequisites" in dataset_json:
         for prerequisite in dataset_json["prerequisites"]:
             dataset.prerequisites.append(prerequisite)
+
+    if "detection-methods" in dataset_json:
+        for detection_method in dataset_json["detection-methods"]:
+            dataset.detection_methods.append(detection_method)
     return dataset
 
 
