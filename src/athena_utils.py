@@ -41,10 +41,12 @@ def reset_sleep_time_seconds():
 def run_query(
     query: str,
     query_stats: QueryStats = None,
-    timeout: int = _DEFAULT_QUERY_TIMEOUT,
+    timeout: Optional[int] = None,
     session: Session = None,
     sleep_time_seconds: Optional[int] = None,
 ):
+    if not timeout:
+        timeout = _DEFAULT_QUERY_TIMEOUT
     result = {}
     client = get_session(session).client("athena")
     if "RESULT_REUSE" in os.environ:
