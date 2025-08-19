@@ -63,6 +63,7 @@ def _parse_cli_input(argv) -> dict:
     parser.add_argument("--from", required=False, dest="from_day", help="From day")
     parser.add_argument("--to", required=False, dest="to_day", help="To day")
     parser.add_argument("--counter", required=False, help="Dataset Counter")
+    parser.add_argument("--method", required=False, help="Detection method")
     parser.add_argument(
         "--interval",
         required=False,
