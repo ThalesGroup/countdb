@@ -20,7 +20,7 @@ from utils import (
     get_last_finished_week,
     get_yesterday,
     get_last_finished_month,
-    _MAX_WORKERS,
+    get_max_workers,
     days_range,
 )
 
@@ -171,7 +171,7 @@ def aggregate(
         if from_day > to_day:
             raise Exception("Start day must be before end day")
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=_MAX_WORKERS, thread_name_prefix="aggregate_"
+        max_workers=get_max_workers(), thread_name_prefix="aggregate_"
     ) as thread_pool:
         for interval_type in [interval_type] if interval_type else ["week", "month"]:
             intervals = list(

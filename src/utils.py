@@ -5,7 +5,9 @@ from typing import Generator
 import boto3
 from boto3 import Session
 
-_MAX_WORKERS = os.environ.get("MAX_WORKERS", 3)
+
+def get_max_workers() -> int:
+    return int(os.environ.get("MAX_WORKERS", 3))
 
 
 def get_session(session: Session = None) -> boto3.Session:

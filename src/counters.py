@@ -16,7 +16,7 @@ from datasets import (
     build_exists_query,
 )
 from table_creator import get_table_creator
-from utils import days_range, get_yesterday, get_session, _MAX_WORKERS
+from utils import days_range, get_yesterday, get_session, get_max_workers
 
 
 def collect(
@@ -64,7 +64,7 @@ def collect(
     errors = 0
     success = 0
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=_MAX_WORKERS, thread_name_prefix="collect_"
+        max_workers=get_max_workers(), thread_name_prefix="collect_"
     ) as thread_pool:
         futures = []
         exists = []
