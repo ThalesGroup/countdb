@@ -25,6 +25,7 @@ from table_creator import (
 from temp_table_utils import generate_temp_table_name
 
 _DAY_PH = "{day}"
+_DEFAULT_MIN_AVG = 10.0
 
 
 class _Counter(NamedTuple):
@@ -100,7 +101,7 @@ def _dataset_from_json(dataset_json) -> _CounterDataset:
             counter_json.get("method", "sum"),
             counter_json["sql"],
             counter_json.get("value"),
-            counter_json.get("min-avg"),
+            counter_json.get("min-avg", _DEFAULT_MIN_AVG),
             counter_json.get("max-record", False),
         )
     if "temp-tables" in dataset_json:

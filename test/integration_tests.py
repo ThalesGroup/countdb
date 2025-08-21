@@ -154,7 +154,7 @@ class TestSimpleIntegrationDataset:
         ]
 
     @staticmethod
-    def _run_detect(method: str) -> dict:
+    def _run_detect(method: str, counter_id: int) -> dict:
         start_day = "2024-05-01"
         end_day = "2024-05-31"
 
@@ -163,6 +163,7 @@ class TestSimpleIntegrationDataset:
                 "operation": "detect",
                 "dataset": "simple_dataset",
                 "interval": "day",
+                "counter": counter_id,
                 "from_day": start_day,
                 "to_day": end_day,
                 "override": True,
@@ -175,7 +176,7 @@ class TestSimpleIntegrationDataset:
                FROM countdb.highlights
                WHERE dataset = 'simple_dataset'
                      AND interval_type = 'day'
-                     AND counter_id = 2
+                     AND counter_id = {counter_id}
                      AND method = '{method}'"""
             )
         )
@@ -184,7 +185,7 @@ class TestSimpleIntegrationDataset:
             highlights[0].items()
             >= {
                 "method": method,
-                "counter_id": "2",
+                "counter_id": f"{counter_id}",
                 "intervals": f'[{", ".join(days_range(start_day, end_day))}]',
                 "dataset": "simple_dataset",
                 "interval_type": "day",
@@ -193,31 +194,31 @@ class TestSimpleIntegrationDataset:
         return highlights[0]
 
     def test_detect_peak(self):
-        result = self._run_detect(method="Peak")
+        result = self._run_detect(method="Peak", counter_id=2)
         assert (
             result.items()
             >= {
+                "sub_method": "IQR",
                 "int_key": "[1]",
-                "sub_method": "EmpiricalRule",
                 "anomalies": "[2024-05-15]",
                 "vals": str([100 if i == 15 else 1 for i in range(1, 32)]),
             }.items()
         )
 
     def test_detect_trend(self):
-        result = self._run_detect(method="Trend")
+        result = self._run_detect(method="Trend", counter_id=2)
         assert (
             result.items()
             >= {
                 "int_key": "[2]",
-                "sub_method": None,
+                "sub_method": "Strong",
                 "anomalies": None,
                 "vals": str(list(range(1, 32))),
             }.items()
         )
 
     def test_detect_pattern(self):
-        result = self._run_detect(method="Pattern")
+        result = self._run_detect(method="Pattern", counter_id=2)
         assert (
             result.items()
             >= {

@@ -179,7 +179,13 @@ LOCATION '{self.get_full_location()}'"""
         try:
             temp_tables = self._create_temp_tables(dataset, day, query_stats, session)
             kwargs["temp_tables"] = temp_tables
-            sql = self.get_sql(dataset, self.partition_value(day), counter_id, **kwargs)
+            sql = self.get_sql(
+                dataset=dataset,
+                day=self.partition_value(day),
+                counter_id=counter_id,
+                session=session,
+                **kwargs,
+            )
             if logging.getLogger().isEnabledFor(logging.DEBUG):
                 logging.debug(sql)
             ctas_query = f"""
