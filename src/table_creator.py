@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 from abc import abstractmethod
 from typing import Dict, Iterable, Optional
 
@@ -14,6 +15,9 @@ from s3_utils import (
 )
 from temp_table_utils import generate_temp_table_name, get_temp_database_name
 from utils import get_session
+
+_table_creators_initialized = False
+_table_creators_lock = threading.Lock()
 
 _DEFAULT_DATABASE_NAME = "countdb"
 _COUNTER_PARTITION_NAME = "cnt_id"
@@ -178,15 +182,17 @@ LOCATION '{self.get_full_location()}'"""
             sql = self.get_sql(dataset, self.partition_value(day), counter_id, **kwargs)
             if logging.getLogger().isEnabledFor(logging.DEBUG):
                 logging.debug(sql)
-            result = run_query(
-                f"""
+            ctas_query = f"""
 CREATE TABLE {temp_table_name} 
 WITH (external_location='s3://{get_bucket()}/{partition_path}', 
       format='PARQUET', {"" if counter_id is not None or not self._split_to_counters() else
             f"partitioned_by=ARRAY['{_COUNTER_PARTITION_NAME}'],"}
-      bucketed_by=ARRAY['counter_id'], bucket_count=1) AS {sql}""",
+      bucketed_by=ARRAY['counter_id'], bucket_count=1) AS {sql}"""
+            result = run_query(
+                ctas_query,
                 query_stats,
                 session=session,
+                timeout=kwargs["timeout"] if "timeout" in kwargs else None,
             )
             if result["Status"] != "SUCCEEDED":
                 if "StateChangeReason" in result:
@@ -229,26 +235,32 @@ def _register_table_creator(table_creator: TableCreator):
 
 
 def _init_table_creators():
-    if len(_table_creators) > 0:
+    global _table_creators_initialized
+    if _table_creators_initialized:
         return
-    from counters import DailyCountersCreator
+    with _table_creators_lock:
+        if _table_creators_initialized:
+            return
+        # ... initialization code ...
+        from counters import DailyCountersCreator
 
-    _register_table_creator(DailyCountersCreator())
-    from counters_metadata import CountersMetadata
+        _register_table_creator(DailyCountersCreator())
+        from counters_metadata import CountersMetadata
 
-    _register_table_creator(CountersMetadata())
-    from max_counters import DailyMaxCounters, WeeklyMaxCounters, MonthlyMaxCounters
+        _register_table_creator(CountersMetadata())
+        from max_counters import DailyMaxCounters, WeeklyMaxCounters, MonthlyMaxCounters
 
-    _register_table_creator(DailyMaxCounters())
-    _register_table_creator(WeeklyMaxCounters())
-    _register_table_creator(MonthlyMaxCounters())
-    from aggregate import WeeklyCountersCreator, MonthlyCountersCreator
+        _register_table_creator(DailyMaxCounters())
+        _register_table_creator(WeeklyMaxCounters())
+        _register_table_creator(MonthlyMaxCounters())
+        from aggregate import WeeklyCountersCreator, MonthlyCountersCreator
 
-    _register_table_creator(WeeklyCountersCreator())
-    _register_table_creator(MonthlyCountersCreator())
-    from detection_methods import HighlightsCreator
+        _register_table_creator(WeeklyCountersCreator())
+        _register_table_creator(MonthlyCountersCreator())
+        from detection_methods import HighlightsCreator
 
-    _register_table_creator(HighlightsCreator())
+        _register_table_creator(HighlightsCreator())
+        _table_creators_initialized = True
 
 
 def get_table_creator(name: str) -> TableCreator:
