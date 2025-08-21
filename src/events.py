@@ -56,9 +56,10 @@ def _do_detect(args) -> Dict:
     if method is None or method in ["Peak", "Trend", "Pattern"]:
         detect_highlights(
             dataset_name=dataset,
+            interval_type=interval,
+            counter_id=counter_id,
             from_day=from_day,
             to_day=to_day,
-            interval_type=interval,
             method=method,
             override=override,
         )

@@ -58,6 +58,7 @@ class _CounterDataset:
         self.views: Dict[str, str] = {}
         self.prerequisites: List[str] = []
         self.detection_methods: List[str] = []
+        self.query_timeout: Dict[str, int] = {}
 
 
 _DATASETS: Dict[str, _CounterDataset] = {}
@@ -118,6 +119,10 @@ def _dataset_from_json(dataset_json) -> _CounterDataset:
     if "detection-methods" in dataset_json:
         for detection_method in dataset_json["detection-methods"]:
             dataset.detection_methods.append(detection_method)
+
+    if "query-timeout" in dataset_json:
+        for query_type, timeout in dataset_json["query-timeout"].items():
+            dataset.query_timeout[query_type] = timeout
     return dataset
 
 
