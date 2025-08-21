@@ -1,8 +1,8 @@
 import base64
-import datetime
 import json
 import os
 import re
+from datetime import datetime
 from typing import Optional
 
 import pytest
@@ -10,11 +10,11 @@ from moto import mock_aws
 from moto.athena.models import QueryResults
 
 from athena_backend_infra import AthenaMockQueryHandler, MyAthenaBackendContext
+from athena_utils import reset_sleep_time_seconds
 from conftest import get_b64_resource, init_athena_mock
 from events import handle_event
-from s3_utils import folder_last_modified, upload_content_to_s3
+from s3_utils import upload_content_to_s3, s3_folder_tree
 from utils import get_session
-from athena_utils import reset_sleep_time_seconds
 
 
 @pytest.fixture(autouse=True)
@@ -37,11 +37,23 @@ def athena_mock(monkeypatch):
 
 
 class TestCountDBIntegration:
-    def test_folder_last_modified(self):
+    def test_s3_folder_tree(self):
         session = get_session()
+        today = datetime.now().strftime("%Y-%m-%d")
         upload_content_to_s3("some/path/to/check/1.txt", "hello", session)
-        result = folder_last_modified("some/path/to/check/", session)
-        assert result == {"1.txt": str(datetime.date.today())}
+        result = s3_folder_tree("some/path/", "to/check", session)
+        assert result == {"to": {"check": today}}
+        result = s3_folder_tree("some/path/", "to/", session)
+        assert result == {"to": {"check": today}}
+        upload_content_to_s3("some/path/to/check2/2.txt", "hello", session)
+        result = s3_folder_tree("some/path/", "to/", session)
+        assert result == {"to": {"check": today, "check2": today}}
+        upload_content_to_s3("some/path/to2/check3/3.txt", "hello", session)
+        result = s3_folder_tree("some/path/", "", session)
+        assert result == {
+            "to": {"check": today, "check2": today},
+            "to2": {"check3": today},
+        }
 
     def test_dataset_doesnt_exist(self):
         with pytest.raises(Exception, match="Could not find dataset: no_such_database"):

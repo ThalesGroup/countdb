@@ -40,17 +40,39 @@ def list_s3_folder_keys(folder: str, session: Session = None) -> List[str]:
         return []
 
 
-def folder_last_modified(prefix: str, session: Session = None) -> Dict[str, str]:
+def s3_folder_tree(root: str, prefix: str, session: Session = None) -> dict:
+    """
+    Build a nested dictionary representing the S3 folder tree.
+    Each folder with only objects is mapped to its last modified date (YYYY-MM-DD).
+    Each folder with subfolders is mapped to a nested dict.
+    """
     s3_client = get_session(session).client("s3")
-    result = s3_client.list_objects(Bucket=get_bucket(), Prefix=prefix)
-    contents = result.get("Contents")
-    if contents:
-        return {
-            row["Key"][len(prefix) :]: str(row["LastModified"].date())
-            for row in contents
-        }
-    else:
-        return {}
+
+    paginator = s3_client.get_paginator("list_objects_v2")
+    folders = {}
+
+    for page in paginator.paginate(Bucket=get_bucket(), Prefix=root + prefix):
+        for obj in page.get("Contents", []):
+
+            key = obj["Key"]
+
+            rel_path = key[len(root) :].lstrip("/")
+            parts = rel_path.split("/")
+
+            if not parts or parts == [""]:
+                continue
+
+            lm = obj["LastModified"].date().isoformat()
+
+            current = folders
+            for i, part in enumerate(parts):
+                if i == len(parts) - 2:  # parent folder of file
+                    if part not in current or isinstance(current[part], str):
+                        current[part] = lm
+                    break
+                else:
+                    current = current.setdefault(part, {})
+    return folders
 
 
 def get_s3_object_content(object_path: str, session: Session = None):
