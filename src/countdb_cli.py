@@ -107,6 +107,7 @@ def _run_cli_command(command: dict):
     else:
         result = _run_operation(command, verbose)
     print(result)
+    return result
 
 
 def _get_function_name() -> str:
@@ -225,7 +226,7 @@ def _local_mode():
     return os.environ.get("LOCAL_MODE", "false").lower() == "true"
 
 
-def run_cli(cli_args: List[str]):
+def run_cli(cli_args: List[str]) -> dict:
     is_admin = len(cli_args) > 1 and cli_args[1] == "admin"
     if is_admin:
         parsed_command = _parse_admin_cli_input(cli_args[2:])
@@ -233,7 +234,9 @@ def run_cli(cli_args: List[str]):
         parsed_command = _parse_cli_input(cli_args[1:])
     if _init_env(parsed_command["config"]):
         del parsed_command["config"]
-        _run_cli_command(parsed_command)
+        return _run_cli_command(parsed_command)
+    else:
+        return {}
 
 
 if __name__ == "__main__":

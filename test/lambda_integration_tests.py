@@ -2,12 +2,14 @@ import json
 import logging
 import os
 from base64 import b64decode
+from typing import List
 
 import boto3
 import botocore.config
 import pytest
 
 from conftest import get_b64_resource, init_aws_creds
+from countdb_cli import run_cli
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -19,6 +21,20 @@ def init_env():
 @pytest.fixture(autouse=True)
 def set_evn(monkeypatch):
     monkeypatch.setenv("FUNCTION_NAME", "countdb")
+
+
+def _run_admin_cli(op: List[str]):
+    op.insert(0, "")
+    op.insert(1, "admin")
+    op.append("--config")
+    op.append("countdb.config.json")
+
+    return run_cli(op)
+
+
+def test_install_latest_version():
+    result = _run_admin_cli(["install", "--verbose"])
+    assert result["success"]
 
 
 class TestLambdaIntegrationDataset:

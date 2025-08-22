@@ -1,5 +1,6 @@
 import http.client
 import json
+import logging
 import os
 import tempfile
 from random import randint
@@ -184,6 +185,7 @@ def _github_api_request(url: str = None) -> dict:
         if "GITHUB_TOKEN" in os.environ:
             headers["Authorization"] = f"token {os.environ['GITHUB_TOKEN']}"
         final_url = f"/repos/{_GITHUB_REPO_OWNER}/{_GITHUB_REPO_NAME}"
+        logging.info("Going to download from github repo: %s", final_url)
         if url:
             final_url += f"/{url}"
         conn.request("GET", final_url, headers=headers)
@@ -217,7 +219,9 @@ def _download_sources(version: str):
     else:
         release = _github_api_request(f"releases/tags/{version}")
     asset = release["assets"][0]
-
+    logging.info(
+        "Tag Name: %s. Published at: %s", release["tag_name"], release["published_at"]
+    )
     conn = None
     try:
         conn = http.client.HTTPSConnection("api.github.com")
