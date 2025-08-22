@@ -93,7 +93,7 @@ def list_s3_folders(folder: str, session: Session = None) -> List[str]:
 
 def clear_s3_folder(s3_folder: str, session: Session = None) -> int:
     if not s3_folder.endswith("/"):
-        s3_folder += "/"  # make sure to the delete only the context of a folder
+        s3_folder += "/"  # make sure to delete only the context of a folder
     s3 = get_session(session).resource("s3")
     bucket = s3.Bucket(get_bucket())
     res = bucket.objects.filter(Prefix=s3_folder).delete()
