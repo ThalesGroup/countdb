@@ -209,7 +209,8 @@ WITH (external_location='s3://{get_bucket()}/{partition_path}',
                 f"Partition path: {partition_path}. Data scanned: {query_stats}"
             )
         except Exception as e:
-            logging.error(f"Error running query:\n{sql}")
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f"Error running query:\n{sql}")
             raise e
         finally:
             run_query(f"DROP TABLE IF EXISTS {temp_table_name}", session=session)

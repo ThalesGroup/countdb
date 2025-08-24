@@ -26,6 +26,7 @@ from temp_table_utils import generate_temp_table_name
 
 _DAY_PH = "{day}"
 _DEFAULT_MIN_AVG = 10.0
+_DEFAULT_DETECT_QUERY_TIMEOUT = 300
 
 
 class _Counter(NamedTuple):
@@ -37,6 +38,7 @@ class _Counter(NamedTuple):
     value: str
     min_avg: float
     max_record: bool
+    timeout: int
 
 
 def replace_sql_place_holders(sql: str, day: str, temp_tables: Dict[str, str]) -> str:
@@ -103,6 +105,7 @@ def _dataset_from_json(dataset_json) -> _CounterDataset:
             counter_json.get("value"),
             counter_json.get("min-avg", _DEFAULT_MIN_AVG),
             counter_json.get("max-record", False),
+            counter_json.get("timeout", _DEFAULT_DETECT_QUERY_TIMEOUT),
         )
     if "temp-tables" in dataset_json:
         for temp_table_name in dataset_json["temp-tables"]:
@@ -121,9 +124,6 @@ def _dataset_from_json(dataset_json) -> _CounterDataset:
         for detection_method in dataset_json["detection-methods"]:
             dataset.detection_methods.append(detection_method)
 
-    if "query-timeout" in dataset_json:
-        for query_type, timeout in dataset_json["query-timeout"].items():
-            dataset.query_timeout[query_type] = timeout
     return dataset
 
 
@@ -146,22 +146,69 @@ def _validate_dataset_json(json_data) -> List[str]:
     ids = set()
     names = set()
     for counter_json in json_data["counters"]:
-        c_id = counter_json["id"]
-        c_name = counter_json["name"]
-        if c_id in ids:
-            duplicate_ids.append(c_id)
-        else:
-            ids.add(c_id)
-        if c_name in names:
-            duplicate_names.append(c_name)
-        else:
-            names.add(c_name)
-
+        c_errors = validate_counter_json(counter_json)
+        if len(c_errors) > 0:
+            errors += c_errors
+        if "id" in counter_json and "name" in counter_json:
+            c_id = counter_json["id"]
+            c_name = counter_json["name"]
+            if c_id in ids:
+                duplicate_ids.append(c_id)
+            else:
+                ids.add(c_id)
+            if c_name in names:
+                duplicate_names.append(c_name)
+            else:
+                names.add(c_name)
     if len(duplicate_ids) > 0:
         errors.append(f"Duplicate ids found: {duplicate_ids}")
     if len(duplicate_names) > 0:
         errors.append(f"Duplicate names found: {duplicate_names}")
     return errors
+
+
+def validate_counter_json(counter: dict) -> List[str]:
+    errors = []
+    if "id" not in counter:
+        errors.append("Missing id")
+    elif not isinstance(counter["id"], int) or counter["id"] < 0 or counter["id"] > 255:
+        errors.append(
+            f"Invalid id: {counter['id']}. Should be an integer between 0 and 255"
+        )
+    if len(errors) > 0:
+        return errors
+    if "name" not in counter:
+        errors.append("Missing name")
+    if "sql" not in counter:
+        errors.append("Missing sql")
+    if "aggregate" in counter and not isinstance(counter["aggregate"], bool):
+        errors.append("aggregate should be boolean")
+    if "method" in counter and counter["method"] not in ("sum", "max"):
+        errors.append(f"Invalid aggregation method: {counter['method']}")
+    if "min-avg" in counter:
+        try:
+            value = float(counter["min-avg"])
+            if value < 0:
+                errors.append(
+                    f"min-avg should be non-negative. Got: {counter['min-avg']}"
+                )
+        except (TypeError, ValueError):
+            errors.append(f"min-avg should be a number. Got: {counter['min-avg']}")
+    if "max-record" in counter and not isinstance(counter["max-record"], bool):
+        errors.append("max-record should be boolean")
+    if "timeout" in counter:
+        timeout = counter["timeout"]
+        if not isinstance(timeout, int):
+            try:
+                timeout = int(timeout)
+            except (TypeError, ValueError):
+                errors.append(
+                    f"timeout should be a positive integer. Got: {counter['timeout']}"
+                )
+                return errors
+        if timeout <= 0:
+            errors.append("timeout should be a positive integer")
+    return [f"Counter ID: {counter['id']} - {e}" for e in errors]
 
 
 def update_dataset_str(json_data_str: str) -> Dict:
@@ -348,11 +395,6 @@ def validate_dataset(dataset: _CounterDataset) -> List[str]:
         f"Going to validate dataset: {dataset.name}. Counters number: {len(dataset.counters)}"
     )
     result = []
-    for c in dataset.counters.values():
-        if c.aggregate and c.aggregation_method not in ("sum", "max"):
-            result.append(
-                f"Counter: {c.name} has an invalid aggregation method: {c.aggregation_method}"
-            )
     query_stats = QueryStats()
     session = get_session()
 

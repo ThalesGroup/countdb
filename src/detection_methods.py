@@ -78,8 +78,10 @@ def detect_highlights(
     )
     shutdown_called = False
     results: List[Dict] = []
+    workers = get_max_workers()
+    logging.info(f"Detecting highlights. Workers: {workers}")
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=get_max_workers(), thread_name_prefix="max_"
+        max_workers=workers, thread_name_prefix="max_"
     ) as thread_pool:
         futures = []
         for dataset, d_method, interval, cnt_id in _get_detection_tasks(
@@ -252,13 +254,11 @@ def _run_highlight_task(
 ) -> Dict[str, any]:
     try:
         start_time = datetime.now()
-        logging.info(
-            f"detecting highlights for Dataset {dataset}, Interval: {interval}, Method: {method}"
-        )
         session = get_session()
-        timeout = get_dataset(dataset, session).query_timeout.get("detection")
-        if timeout:
-            logging.info(f"Using custom timeout for detection: {timeout} seconds")
+        counter = get_dataset(dataset, session).counters[counter_id]
+        logging.info(
+            f"detecting highlights for Dataset {dataset}, Interval: {interval}, Method: {method}. Counter ID: {counter_id}. Counter: {counter.name} Timeout: {counter.timeout} seconds"
+        )
         result = get_table_creator("highlights").create_day(
             dataset,
             day=interval,
@@ -269,7 +269,7 @@ def _run_highlight_task(
             counter_id=counter_id,
             from_day=from_day,
             to_day=to_day,
-            timeout=timeout,
+            timeout=counter.timeout,
         )
         has_data = (
             len(list_s3_folder_keys(result["partition_path"], session=session)) > 0

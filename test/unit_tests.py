@@ -4,6 +4,7 @@ from datetime import datetime
 import pytest
 
 from countdb_cli import _parse_cli_input
+from datasets import validate_counter_json
 from pack_sources import zip_sources
 from utils import (
     days_range,
@@ -82,3 +83,45 @@ class TestCLI:
         with pytest.raises(SystemExit):
             _parse_cli_input(["no_such_op"])
         assert "invalid choice: 'no_such_op" in capsys.readouterr().err
+
+
+class TestValidateCounter:
+    def test_validate_counter_empty(self):
+        result = validate_counter_json({})
+        assert result == ["Missing id", "Missing name", "Missing sql"]
+
+    def test_validate_counter_minimal(self):
+        result = validate_counter_json({"id": 1, "name": "Test", "sql": "SELECT 1"})
+        assert result == []
+
+    def test_validate_counter_full(self):
+        result = validate_counter_json(
+            {
+                "id": 1,
+                "name": "Test",
+                "sql": "SELECT 1",
+                "min_avg": 0.1,
+            }
+        )
+        assert result == []
+
+    def test_validate_counter_bad_id(self):
+        result = validate_counter_json(
+            {
+                "id": "Test",
+                "name": "Test",
+                "sql": "SELECT 1",
+            }
+        )
+        assert result == ["Invalid id: Test. Should be an integer between 0 and 255"]
+
+    def test_bad_timeout(self):
+        result = validate_counter_json(
+            {
+                "id": 1,
+                "name": "Test",
+                "sql": "SELECT 1",
+                "timeout": -5,
+            }
+        )
+        assert result == ["Counter ID: 1 - timeout should be a positive integer"]
