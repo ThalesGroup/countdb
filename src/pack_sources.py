@@ -1,5 +1,6 @@
 import os
 import tempfile
+from datetime import datetime
 from zipfile import ZipFile
 
 _DEP_PACKAGE = os.path.join(tempfile.gettempdir(), "deployment_package.zip")
@@ -12,8 +13,10 @@ def _get_root_dir() -> str:
 
 
 def _get_version():
-    with open(os.path.join(_get_root_dir(), "app.yaml"), "r") as f:
-        return f.readlines()[-1].split(":")[1].strip()
+    if "VERSION" in os.environ:
+        return os.environ["VERSION"]
+    else:
+        return f"SOURCES. Packed at {datetime.now().isoformat()}"
 
 
 def _get_sources_dir() -> str:
