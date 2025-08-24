@@ -43,10 +43,30 @@ PYTHONPATH=src:test python -m pytest --color=yes test/*_unit.py
 Unit tests also run automatically on every push using a dedicated workflow.
 
 #### Running integration tests
-To run integration tests locally, you first have to add API keys to your environment.
+To run integration tests locally, you first have to add API keys to your environment. You can do it by creating a file named "config" under the "aws" dir. Here is an example of the file:
+```
+AWS_ACCESS_KEY_ID=YOUR_ACCESS_KEY
+AWS_SECRET_ACCESS_KEY=YOUR_SECRET_KEY
+AWS_REGION=YOUR_REGION
+```
+Then, to run all the integration tests locally, use the following command:
+
 ```sh
 PYTHONPATH=src:test python -m pytest --color=yes test/*_integration.py
 ```
+
+### Building docker image and using it
+To build the docker image, use the following command from the root of the repository:
+```sh
+docker build -t dd-hoenypot .
+```
+To run the docker image, use the following command:
+```sh
+docker run -it --rm --name dd-honeypot -p 5000:80 -v $(pwd)/test/honeypots:/data/honeypot dd-hoenypot
+```
+explanation of the command:
+- `-p 5000:80`: Map port 5000 on the host to port 80 in the container. You add additional ports if needed.
+- `-v $(pwd)/test/honeypots:/data/honeypot`: Mount the local directory `test/honeypots` to `/data/honeypot` in the container. This allows you to access files in the container from your host machine. You can change the path to any other directory you want to mount.
 
 ### Version publication
 

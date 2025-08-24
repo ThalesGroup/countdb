@@ -330,6 +330,30 @@ def _get_filter_by_interval_type(
         raise Exception(f"Unknown interval type: {interval_type}")
 
 
+def _get_window_function_sql(name: str, interval_type: str) -> str:
+    if name == "interval_rank":
+        return (
+            f"ROW_NUMBER() OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2 "
+            f"ORDER BY {interval_type}) AS interval_rank"
+        )
+    elif name == "row_count":
+        return "COUNT() OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS row_count"
+    elif name == "avg_value":
+        return "AVG(value) OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS avg_value"
+    elif name == "stddev_value":
+        return "STDDEV(value) OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS stddev_value"
+    elif name == "q1":
+        return "APPROX_PERCENTILE(value, 0.25) OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS q1"
+    elif name == "q3":
+        return "APPROX_PERCENTILE(value, 0.75) OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS q3"
+    elif name == "max_value":
+        return "MAX(value) OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS max_value"
+    elif name == "min_value":
+        return "MIN(value) OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS min_value"
+    else:
+        raise ValueError(f"Unknown window function: {name}")
+
+
 def _get_counters_data_sql(
     database_name: str,
     dataset: str,
@@ -337,19 +361,12 @@ def _get_counters_data_sql(
     counter_id: int,
     from_day: str = None,
     to_day: str = None,
-    add_interval_rank: bool = False,
-    add_count: bool = False,
-    add_avg: bool = False,
+    window_functions: List[str] = None,
 ) -> str:
-    int_rank = f"ROW_NUMBER() OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2 ORDER BY {interval_type}) AS interval_rank"
-    cnt_exp = (
-        "COUNT() OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS cnt"
-    )
-    avg_exp = "AVG(value) OVER (PARTITION BY int_key1, int_key2, str_key1, str_key2) AS avg_value"
-    result = f"""SELECT int_key1, int_key2, str_key1, str_key2,{interval_type} AS interval, value  
-{"," + int_rank if add_interval_rank else ""}
-{"," + cnt_exp if add_count else ""}
-{"," + avg_exp if add_avg else ""}
+    window_functions_sql = ""
+    for w in window_functions if window_functions else []:
+        window_functions_sql += ",\n" + _get_window_function_sql(w, interval_type)
+    result = f"""SELECT int_key1, int_key2, str_key1, str_key2,{interval_type} AS interval, value{window_functions_sql}      
 FROM {database_name}.{_get_counters_table_by_interval_type(interval_type)} 
 WHERE dataset = '{dataset}'
       AND {_get_filter_by_interval_type(interval_type, from_day, to_day)}"""
@@ -389,27 +406,31 @@ def _get_final_detection_sql(
     counter_id: int,
     method: DetectionMethod,
     has_sub_method: bool,
+    join_anomalies_and_data: bool,
     anomalies_exp: str = "",
 ) -> str:
-    return f"""SELECT '{method.name}' AS method,
+    result = f"""SELECT '{method.name}' AS method,
        {counter_id} AS counter_id,
        {"ARBITRARY(sub_method) AS sub_method," if has_sub_method else ""}
-       CASE WHEN d.int_key1 IS NULL THEN NULL
-            WHEN d.int_key2 IS NULL THEN ARRAY[d.int_key1]
-            ELSE ARRAY[d.int_key1, d.int_key2] END AS int_key,
-       CASE WHEN d.str_key1 IS NULL THEN NULL
-            WHEN d.str_key2 IS NULL THEN ARRAY[d.str_key1]
-            ELSE ARRAY[d.str_key1, d.str_key2] END AS str_key,    
+       CASE WHEN a.int_key1 IS NULL THEN NULL
+            WHEN a.int_key2 IS NULL THEN ARRAY[a.int_key1]
+            ELSE ARRAY[a.int_key1, a.int_key2] END AS int_key,
+       CASE WHEN a.str_key1 IS NULL THEN NULL
+            WHEN a.str_key2 IS NULL THEN ARRAY[a.str_key1]
+            ELSE ARRAY[a.str_key1, a.str_key2] END AS str_key,    
        {anomalies_exp + "AS anomalies," if anomalies_exp else ""}
        ARRAY_SORT(ARRAY_AGG(interval)) AS intervals,
-       ARRAY_AGG(value ORDER BY interval) AS vals
-FROM data AS d
-INNER JOIN anomalies a ON
+       ARRAY_AGG(value ORDER BY interval) AS vals\n"""
+    if join_anomalies_and_data:
+        result += """FROM data AS d INNER JOIN anomalies AS a ON 
  (d.int_key1 IS NULL AND a.int_key1 IS NULL OR d.int_key1 = a.int_key1)
- AND (d.int_key2 IS NULL AND a.int_key2 IS NULL OR d.int_key2 = a.int_key2)
- AND (d.str_key1 IS NULL AND a.str_key1 IS NULL OR d.str_key1 = a.str_key1)
- AND (d.str_key2 IS NULL AND a.str_key2 IS NULL OR d.str_key2 = a.str_key2) 
-GROUP BY d.int_key1, d.int_key2, d.str_key1, d.str_key2"""
+  AND (d.int_key2 IS NULL AND a.int_key2 IS NULL OR d.int_key2 = a.int_key2)
+  AND (d.str_key1 IS NULL AND a.str_key1 IS NULL OR d.str_key1 = a.str_key1)
+  AND (d.str_key2 IS NULL AND a.str_key2 IS NULL OR d.str_key2 = a.str_key2)"""
+    else:
+        result += "FROM anomalies AS a"
+    result += "\nGROUP BY a.int_key1, a.int_key2, a.str_key1, a.str_key2"
+    return result
 
 
 def _get_peak_detection_sql(
@@ -421,26 +442,15 @@ def _get_peak_detection_sql(
     to_day: str = None,
 ) -> str:
     return f"""WITH data  AS (
-  {_get_counters_data_sql(database_name, dataset, interval_type, counter.id, from_day, to_day)}),
-stats AS (
-    SELECT int_key1, int_key2, str_key1, str_key2,
-           AVG(value) AS avg_value,
-           STDDEV(value) AS stddev_value,
-           MAX(value) AS max_value,
-           APPROX_PERCENTILE(value, 0.25) AS q1,
-           APPROX_PERCENTILE(value, 0.75) AS q3
-    FROM data
-    GROUP BY int_key1, int_key2, str_key1, str_key2
-    HAVING COUNT() >= {_MIN_DATA_POINTS[interval_type]}
-    AND AVG(value) >= {counter.min_avg}
-),
+  {_get_counters_data_sql(database_name, dataset, interval_type, counter.id, from_day, to_day, 
+                          ["max_value", "avg_value", "stddev_value", "q1", "q3", "row_count"])}),
 anomalies AS (
-  SELECT int_key1, int_key2, str_key1, str_key2, threshold,
+  SELECT int_key1, int_key2, str_key1, str_key2, interval, value, threshold,
     CASE
       WHEN threshold = iqr_threshold THEN 'IQR'
       ELSE 'RSD' 
     END AS sub_method
-  FROM stats CROSS JOIN LATERAL (
+  FROM data CROSS JOIN LATERAL (
     SELECT q3 + 3 * (q3 - q1) AS iqr_threshold,
       CASE 
         WHEN stddev_value / NULLIF(avg_value, 0) > 0.3 THEN NULL
@@ -453,10 +463,12 @@ anomalies AS (
         ELSE LEAST(rsd_threshold, iqr_threshold) 
       END AS threshold
     )
-    WHERE max_value >= threshold
+    WHERE row_count >= {_MIN_DATA_POINTS[interval_type]} 
+          AND avg_value >= {counter.min_avg}
+          AND max_value >= threshold
 )  
-{_get_final_detection_sql(counter.id, DetectionMethod.Peak, True, 
-                          "FILTER(ARRAY_SORT(ARRAY_AGG(IF(value > a.threshold, interval))), x -> x IS NOT NULL)")}         
+{_get_final_detection_sql(counter.id, DetectionMethod.Peak, True, False, 
+                          "FILTER(ARRAY_SORT(ARRAY_AGG(IF(value > threshold, interval))), x -> x IS NOT NULL)")}         
 """
 
 
@@ -470,7 +482,8 @@ def _get_trend_detection_sql(
 ) -> str:
     return f"""
 WITH data AS (
-  {_get_counters_data_sql(database_name, dataset, interval_type, counter.id, from_day, to_day, True, True)}),   
+  {_get_counters_data_sql(database_name, dataset, interval_type, counter.id, from_day, to_day, 
+                          ["interval_rank", "row_count"])}),   
 stats AS (
   SELECT int_key1, int_key2, str_key1, str_key2,
     AVG(value) AS avg_value,
@@ -482,15 +495,15 @@ stats AS (
     -- Calculate relative change from first to last value
     (MAX(value) - MIN(value)) / NULLIF(MIN(value), 0) AS relative_change,
     -- Get recent vs early period averages for trend confirmation  
-    AVG(CASE WHEN interval_rank > 0.7 * cnt THEN value END) AS recent_avg,  -- Last ~30%
-    AVG(CASE WHEN interval_rank <= 0.3 * cnt THEN value END) AS early_avg   -- First ~30%
+    AVG(CASE WHEN interval_rank > 0.7 * row_count THEN value END) AS recent_avg,  -- Last ~30%
+    AVG(CASE WHEN interval_rank <= 0.3 * row_count THEN value END) AS early_avg   -- First ~30%
   FROM data  
   GROUP BY int_key1, int_key2, str_key1, str_key2
   HAVING COUNT() >= {_MIN_DATA_POINTS[interval_type]}
   AND AVG(value) >= {counter.min_avg}),
 anomalies AS (
   SELECT 
-        int_key1, int_key2, str_key1, str_key2,        
+        int_key1, int_key2, str_key1, str_key2,    
         CASE 
             WHEN trend_strength >= 0.8 THEN 'Strong'
             WHEN trend_strength >= 0.4 THEN 'Moderate'  
@@ -503,7 +516,7 @@ anomalies AS (
         AND ABS(relative_change) >= 0.2  -- Meaningful relative change
         -- recent period significantly different from early period
         AND ABS(recent_avg - early_avg) / NULLIF(early_avg, 0) >= 0.15)
-{_get_final_detection_sql(counter.id, DetectionMethod.Trend, True)}
+{_get_final_detection_sql(counter.id, DetectionMethod.Trend, True, True)}
 """
 
 
@@ -518,10 +531,11 @@ def _get_pattern_detection_sql(
     pattern_str = "START UP{3, } FINAL_UP$"
     return f"""
 WITH data AS (
-  {_get_counters_data_sql(database_name, dataset, interval_type, counter.id, from_day, to_day, False, True, True)}),
+  {_get_counters_data_sql(database_name, dataset, interval_type, counter.id, from_day, to_day, 
+                          ["row_count", "avg_value"])}),
 anomalies AS (
   SELECT int_key1, int_key2, str_key1, str_key2, top_interval, 'RecentIncrease' AS sub_method
-  FROM (SELECT * FROM data WHERE cnt >= {_MIN_DATA_POINTS[interval_type]} AND avg_value >= {counter.min_avg}) 
+  FROM (SELECT * FROM data WHERE row_count >= {_MIN_DATA_POINTS[interval_type]} AND avg_value >= {counter.min_avg}) 
   MATCH_RECOGNIZE(
      PARTITION BY int_key1, int_key2, str_key1, str_key2
      ORDER BY interval
@@ -532,8 +546,8 @@ anomalies AS (
      DEFINE
          UP AS value >= PREV(value),
          FINAL_UP AS value >= PREV(value) AND value >= START.value * 1.5 AND value >= avg_value * 1.75))
-{_get_final_detection_sql(counter.id, DetectionMethod.Pattern, True, "ARRAY[ARBITRARY(top_interval)]")}
-"""
+{_get_final_detection_sql(counter.id, DetectionMethod.Pattern, True, True,
+                          "ARRAY[ARBITRARY(top_interval)]")}"""
 
 
 class HighlightsCreator(TableCreator):
