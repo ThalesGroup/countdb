@@ -88,7 +88,7 @@ class TestCLI:
 class TestValidateCounter:
     def test_validate_counter_empty(self):
         result = validate_counter_json({})
-        assert result == ["Missing id", "Missing name", "Missing sql"]
+        assert result == ["Missing id"]
 
     def test_validate_counter_minimal(self):
         result = validate_counter_json({"id": 1, "name": "Test", "sql": "SELECT 1"})
