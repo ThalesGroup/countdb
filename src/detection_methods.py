@@ -400,37 +400,6 @@ def _get_detection_sql(
         raise ValueError(f"Unknown detection method: {detection_method}")
 
 
-def _get_final_detection_sql(
-    counter_id: int,
-    method: DetectionMethod,
-    has_sub_method: bool,
-    join_anomalies_and_data: bool,
-    anomalies_exp: str = "",
-) -> str:
-    result = f"""SELECT '{method.name}' AS method,
-       {counter_id} AS counter_id,
-       {"ARBITRARY(sub_method) AS sub_method," if has_sub_method else ""}
-       CASE WHEN a.int_key1 IS NULL THEN NULL
-            WHEN a.int_key2 IS NULL THEN ARRAY[a.int_key1]
-            ELSE ARRAY[a.int_key1, a.int_key2] END AS int_key,
-       CASE WHEN a.str_key1 IS NULL THEN NULL
-            WHEN a.str_key2 IS NULL THEN ARRAY[a.str_key1]
-            ELSE ARRAY[a.str_key1, a.str_key2] END AS str_key,    
-       {anomalies_exp + "AS anomalies," if anomalies_exp else ""}
-       ARRAY_SORT(ARRAY_AGG(interval)) AS intervals,
-       ARRAY_AGG(value ORDER BY interval) AS vals\n"""
-    if join_anomalies_and_data:
-        result += """FROM data AS d INNER JOIN anomalies AS a ON 
- (d.int_key1 IS NULL AND a.int_key1 IS NULL OR d.int_key1 = a.int_key1)
-  AND (d.int_key2 IS NULL AND a.int_key2 IS NULL OR d.int_key2 = a.int_key2)
-  AND (d.str_key1 IS NULL AND a.str_key1 IS NULL OR d.str_key1 = a.str_key1)
-  AND (d.str_key2 IS NULL AND a.str_key2 IS NULL OR d.str_key2 = a.str_key2)"""
-    else:
-        result += "FROM anomalies AS a"
-    result += "\nGROUP BY a.int_key1, a.int_key2, a.str_key1, a.str_key2"
-    return result
-
-
 def _get_peak_detection_sql(
     database_name: str,
     dataset: str,
@@ -464,10 +433,21 @@ anomalies AS (
     WHERE row_count >= {_MIN_DATA_POINTS[interval_type]} 
           AND avg_value >= {counter.min_avg}
           AND max_value >= threshold
-)  
-{_get_final_detection_sql(counter.id, DetectionMethod.Peak, True, False, 
-                          "FILTER(ARRAY_SORT(ARRAY_AGG(IF(value > threshold, interval))), x -> x IS NOT NULL)")}         
-"""
+)
+SELECT '{DetectionMethod.Peak.name}' AS method,
+       {counter.id} AS counter_id,
+       ARBITRARY(sub_method) AS sub_method,
+       CASE WHEN int_key1 IS NULL THEN NULL
+            WHEN int_key2 IS NULL THEN ARRAY[int_key1]
+            ELSE ARRAY[int_key1, int_key2] END AS int_key,
+       CASE WHEN str_key1 IS NULL THEN NULL
+            WHEN str_key2 IS NULL THEN ARRAY[str_key1]
+            ELSE ARRAY[str_key1, str_key2] END AS str_key, 
+       FILTER(ARRAY_SORT(ARRAY_AGG(IF(value > threshold, interval))), x -> x IS NOT NULL) AS anomalies,
+       ARRAY_SORT(ARRAY_AGG(interval)) AS intervals,
+       ARRAY_AGG(value ORDER BY interval) AS vals
+       FROM anomalies
+       GROUP BY int_key1, int_key2, str_key1, str_key2"""
 
 
 def _get_trend_detection_sql(
@@ -536,22 +516,37 @@ def _get_pattern_detection_sql(
     return f"""
 WITH data AS (
   {_get_counters_data_sql(database_name, dataset, interval_type, counter.id, from_day, to_day, 
-                          ["row_count", "avg_value"])}),
-anomalies AS (
-  SELECT int_key1, int_key2, str_key1, str_key2, top_interval, 'RecentIncrease' AS sub_method
-  FROM (SELECT * FROM data WHERE row_count >= {_MIN_DATA_POINTS[interval_type]} AND avg_value >= {counter.min_avg}) 
-  MATCH_RECOGNIZE(
+                          ["row_count", "avg_value"])})
+SELECT '{DetectionMethod.Pattern.name}' AS method,
+  {counter.id} AS counter_id,
+  'RecentIncrease' AS sub_method,
+  CASE 
+    WHEN int_key1 IS NULL THEN NULL
+    WHEN int_key2 IS NULL THEN ARRAY[int_key1]
+    ELSE ARRAY[int_key1, int_key2] 
+  END AS int_key,
+  CASE 
+    WHEN str_key1 IS NULL THEN NULL
+    WHEN str_key2 IS NULL THEN ARRAY[str_key1]
+    ELSE ARRAY[str_key1, str_key2]
+  END AS str_key,
+  ARRAY[top_interval] AS anomalies,
+  intervals,
+  vals     
+FROM data 
+MATCH_RECOGNIZE(
      PARTITION BY int_key1, int_key2, str_key1, str_key2
      ORDER BY interval
      MEASURES
-         LAST(FINAL_UP.interval) AS top_interval
+         LAST(FINAL_UP.interval) AS top_interval,
+         ARRAY_AGG(interval) AS intervals,
+         ARRAY_AGG(value) AS vals         
      AFTER MATCH SKIP PAST LAST ROW
      PATTERN ({pattern_str})
      DEFINE
+         START AS row_count >= {_MIN_DATA_POINTS[interval_type]} AND avg_value >= {counter.min_avg},
          UP AS value >= PREV(value),
-         FINAL_UP AS value >= PREV(value) AND value >= START.value * 1.5 AND value >= avg_value * 1.75))
-{_get_final_detection_sql(counter.id, DetectionMethod.Pattern, True, True,
-                          "ARRAY[ARBITRARY(top_interval)]")}"""
+         FINAL_UP AS value >= PREV(value) AND value >= START.value * 1.5 AND value >= avg_value * 1.75)"""
 
 
 class HighlightsCreator(TableCreator):
