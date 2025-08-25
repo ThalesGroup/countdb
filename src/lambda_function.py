@@ -16,5 +16,5 @@ def lambda_handler(event, context):
         logging.info(result)
         return result
     except Exception as e:
-        logging.error(f"Error running lambda_handler: {str(e)}")
+        logging.exception(f"Error running lambda_handler: {str(e)}")
         return {"error": str(e)}

@@ -185,9 +185,7 @@ def _get_detection_methods(
         return {DetectionMethod[m] for m in dataset.detection_methods}
     else:
         # By default, use Peak detection method
-        return {
-            DetectionMethod.Peak,
-        }
+        return {DetectionMethod.Peak, DetectionMethod.Trend}
 
 
 def _remove_key_prefix(d: dict):
@@ -486,6 +484,8 @@ WITH data AS (
                           ["interval_rank", "row_count"])}),   
 stats AS (
   SELECT int_key1, int_key2, str_key1, str_key2,
+    ARRAY_SORT(ARRAY_AGG(interval)) AS intervals,
+    ARRAY_AGG(value ORDER BY interval) AS vals,    
     AVG(value) AS avg_value,
     MIN(value) AS min_value,
     MAX(value) AS max_value,
@@ -500,24 +500,28 @@ stats AS (
   FROM data  
   GROUP BY int_key1, int_key2, str_key1, str_key2
   HAVING COUNT() >= {_MIN_DATA_POINTS[interval_type]}
-  AND AVG(value) >= {counter.min_avg}),
-anomalies AS (
-  SELECT 
-        int_key1, int_key2, str_key1, str_key2,    
+  AND AVG(value) >= {counter.min_avg})
+SELECT '{DetectionMethod.Trend.name}' AS method,
         CASE 
             WHEN trend_strength >= 0.8 THEN 'Strong'
             WHEN trend_strength >= 0.4 THEN 'Moderate'  
             ELSE 'Weak'
-        END AS sub_method
+        END AS sub_method,
+       {counter.id} AS counter_id,
+       CASE WHEN int_key1 IS NULL THEN NULL
+            WHEN int_key2 IS NULL THEN ARRAY[int_key1]
+            ELSE ARRAY[int_key1, int_key2] END AS int_key,
+       CASE WHEN str_key1 IS NULL THEN NULL
+            WHEN str_key2 IS NULL THEN ARRAY[str_key1]
+            ELSE ARRAY[str_key1, str_key2] END AS str_key,         
+        intervals, vals
     FROM stats CROSS JOIN LATERAL (
         SELECT ABS(trend_slope) * ABS(correlation) AS trend_strength)
     WHERE ABS(trend_slope) >= 0.1  -- Significant slope
         AND ABS(correlation) >= 0.5  -- Good correlation (trend is not just noise)
         AND ABS(relative_change) >= 0.2  -- Meaningful relative change
         -- recent period significantly different from early period
-        AND ABS(recent_avg - early_avg) / NULLIF(early_avg, 0) >= 0.15)
-{_get_final_detection_sql(counter.id, DetectionMethod.Trend, True, True)}
-"""
+        AND ABS(recent_avg - early_avg) / NULLIF(early_avg, 0) >= 0.15"""
 
 
 def _get_pattern_detection_sql(
