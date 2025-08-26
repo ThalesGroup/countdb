@@ -42,7 +42,7 @@ def _do_detect(args) -> Dict:
     to_day = args["to_day"] if "to_day" in args else None
     interval = args["interval"] if "interval" in args else None
     method = args["method"] if "method" in args else None
-    counter_id = args["counter"] if "counter" in args else None
+    counter_id = int(args["counter"]) if "counter" in args else None
     override = "override" in args and str(args["override"]).lower() == "true"
     if method is None or method == "max":
         detect_max_records(
