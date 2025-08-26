@@ -512,14 +512,13 @@ def _get_pattern_detection_sql(
     from_day: str = None,
     to_day: str = None,
 ) -> str:
-    pattern_str = "START UP{3, } FINAL_UP$"
     return f"""
 WITH data AS (
   {_get_counters_data_sql(database_name, dataset, interval_type, counter.id, from_day, to_day, 
                           ["row_count", "avg_value"])})
 SELECT '{DetectionMethod.Pattern.name}' AS method,
   {counter.id} AS counter_id,
-  'RecentIncrease' AS sub_method,
+  ARBITRARY(sub_method) AS sub_method,
   CASE 
     WHEN int_key1 IS NULL THEN NULL
     WHEN int_key2 IS NULL THEN ARRAY[int_key1]
@@ -530,23 +529,34 @@ SELECT '{DetectionMethod.Pattern.name}' AS method,
     WHEN str_key2 IS NULL THEN ARRAY[str_key1]
     ELSE ARRAY[str_key1, str_key2]
   END AS str_key,
-  ARRAY[top_interval] AS anomalies,
-  intervals,
-  vals     
+  ARRAY_SORT(FILTER(ARRAY_AGG(anomaly_interval), x -> x IS NOT NULL)) AS anomalies,
+  ARRAY_SORT(ARRAY_AGG(interval)) AS intervals,
+  ARRAY_AGG(value ORDER BY interval) AS vals
 FROM data 
 MATCH_RECOGNIZE(
      PARTITION BY int_key1, int_key2, str_key1, str_key2
      ORDER BY interval
      MEASURES
-         LAST(FINAL_UP.interval) AS top_interval,
-         ARRAY_AGG(interval) AS intervals,
-         ARRAY_AGG(value) AS vals         
+         CASE 
+           WHEN Classifier() = 'FINAL_UP' THEN 'RecentIncrease'
+           WHEN Classifier() = 'PLATEAU' THEN 'PlateauAfterGrowth'
+         END AS sub_method,
+         CASE 
+           WHEN Classifier() = 'FINAL_UP' THEN LAST(FINAL_UP.interval)
+           WHEN Classifier() = 'PLATEAU' THEN FIRST(PLATEAU.interval)
+         END AS anomaly_interval,
+         ARBITRARY(Classifier()) IS NOT NULL AS has_anomaly
+     ALL ROWS PER MATCH WITH UNMATCHED ROWS
      AFTER MATCH SKIP PAST LAST ROW
-     PATTERN ({pattern_str})
+     PATTERN ((START UP{{3,}} FINAL_UP$) | (START GROWTH{{3,}} PLATEAU{{4,}}))
      DEFINE
          START AS row_count >= {_MIN_DATA_POINTS[interval_type]} AND avg_value >= {counter.min_avg},
          UP AS value >= PREV(value),
-         FINAL_UP AS value >= PREV(value) AND value >= START.value * 1.5 AND value >= avg_value * 1.75)"""
+         FINAL_UP AS value >= PREV(value) AND value >= START.value * 1.5 AND value >= avg_value * 1.75,
+         GROWTH AS value > PREV(value) * 1.1,
+         PLATEAU AS value BETWEEN PREV(value) * 0.95 AND PREV(value) * 1.05)
+GROUP BY int_key1, int_key2, str_key1, str_key2
+HAVING ARBITRARY(has_anomaly)"""
 
 
 class HighlightsCreator(TableCreator):
