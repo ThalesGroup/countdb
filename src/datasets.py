@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 import logging
 from datetime import date
@@ -23,6 +24,7 @@ from table_creator import (
     _COUNTER_PARTITION_NAME,
 )
 from temp_table_utils import generate_temp_table_name
+from utils import get_max_workers
 
 _DAY_PH = "{day}"
 _DEFAULT_MIN_AVG = 10.0
@@ -255,40 +257,6 @@ def _load_dataset_by_key(key: str, session: Session = None) -> _CounterDataset:
     return dataset
 
 
-def compile_dataset_counter(
-    dataset_name: str, counter_id: int, query_stats: QueryStats
-) -> List[str]:
-    today = str(date.today())
-    session = get_session()
-    dataset = get_dataset(dataset_name, session)
-    temp_tables = {}
-    try:
-        for temp_table in dataset.temp_tables:
-            try:
-                temp_tables[temp_table] = _create_dataset_temp_table(
-                    dataset, today, query_stats, temp_table, session=session
-                )
-            except Exception as e:
-                return [
-                    f"Error creating temp table: {temp_table}. Message: {_format_athena_error(str(e))}"
-                ]
-        for view in dataset.views:
-            try:
-                _create_dataset_view(dataset, today, query_stats, view, session=session)
-            except Exception as e:
-                return [
-                    f"Error creating view: {view}. Message: {_format_athena_error(str(e))}"
-                ]
-
-        counter = dataset.counters[counter_id]
-        return _compile_counter(
-            counter, today, temp_tables, query_stats, session=session
-        )
-    finally:
-        for temp_table in temp_tables.values():
-            run_query(f"DROP TABLE IF EXISTS {temp_table}", session=session)
-
-
 def create_dataset_temp_tables(
     dataset: _CounterDataset, day: str, query_stats: QueryStats, session: Session = None
 ):
@@ -345,15 +313,12 @@ def _create_dataset_view(dataset, day, query_stats, view, session: Session = Non
 
 
 def _compile_counter(
-    counter: _Counter,
-    day: str,
-    temp_tables: Dict[str, str],
-    query_stats: QueryStats,
-    session: Session = None,
+    counter: _Counter, day: str, temp_tables: Dict[str, str], query_stats: QueryStats
 ) -> List[str]:
     sql = replace_sql_place_holders(counter.sql, day, temp_tables)
     errors = []
     try:
+        session = get_session()
         results = get_query_results(sql, query_stats, session=session)
         cols = {
             c["Name"]: c["Type"]
@@ -435,11 +400,23 @@ def validate_dataset(dataset: _CounterDataset) -> List[str]:
             ]
 
     for c in dataset.counters.values():
-        logging.info(f"Validating counter. Id: {c.id}, Name: {c.name}")
-        errors = _compile_counter(c, today, temp_tables, query_stats, session=session)
-        if len(errors) > 0:
-            result += errors
-            break
+        workers = get_max_workers()
+        logging.info(
+            f"Validating counter. Id: {c.id}, Name: {c.name}. Max workers: {workers}"
+        )
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=workers, thread_name_prefix="detect_"
+        ) as thread_pool:
+            futures = []
+            future = thread_pool.submit(
+                _compile_counter, c, today, temp_tables, query_stats
+            )
+            futures.append(future)
+            for f in concurrent.futures.as_completed(futures):
+                errors = f.result()
+                if len(errors) > 0:
+                    result += errors
+                    break
     for temp_table in temp_tables.values():
         run_query(f"DROP TABLE IF EXISTS {temp_table}", session=session)
     logging.info(f"Data scanned: {query_stats}")

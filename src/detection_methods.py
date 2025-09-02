@@ -81,7 +81,7 @@ def detect_highlights(
     workers = get_max_workers()
     logging.info(f"Detecting highlights. Workers: {workers}")
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=workers, thread_name_prefix="max_"
+        max_workers=workers, thread_name_prefix="detect_"
     ) as thread_pool:
         futures = []
         for dataset, d_method, interval, cnt_id in _get_detection_tasks(
