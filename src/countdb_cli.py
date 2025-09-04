@@ -45,7 +45,15 @@ def _parse_cli_input(argv) -> dict:
     parser = argparse.ArgumentParser("countdb")
     parser.add_argument(
         "operation",
-        choices=["upload", "collect", "aggregate", "detect", "clear", "init"],
+        choices=[
+            "upload",
+            "collect",
+            "aggregate",
+            "detect",
+            "clear",
+            "init",
+            "sqlite-export",
+        ],
         help="Operation",
     )
     parser.add_argument(
@@ -75,6 +83,9 @@ def _parse_cli_input(argv) -> dict:
     )
     parser.add_argument(
         "--table", required=False, help="Init or Clear for a specific table"
+    )
+    parser.add_argument(
+        "--task", required=False, help="export task name for sqlite-export operation"
     )
     _add_config_file_arg(parser)
     parser.add_argument(

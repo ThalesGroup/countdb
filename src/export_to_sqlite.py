@@ -96,6 +96,7 @@ class TableImporter(ABC):
         force: bool = False,
         records_limit: int = None,
         session=None,
+        verbose: bool = False,
     ) -> int:
         logging.info(f"Running import for table {self.table_name}")
         filter_condition = self.data_filter()
@@ -108,6 +109,8 @@ WHERE {time_filter}
       AND {filter_condition} 
 ORDER BY dataset, counter_id
 LIMIT {records_limit if records_limit else 'ALL'}"""
+        if verbose:
+            logging.info(f"Query for table {self.table_name}:\n{query}")
         keys = run_ctas_query(
             f"{self.task_name}_{self.table_name}",
             query,
@@ -115,7 +118,7 @@ LIMIT {records_limit if records_limit else 'ALL'}"""
             force=force,
             session=session,
         )
-        output_dir = f"temp_cache/{self.table_name}"
+        output_dir = os.path.join(tempfile.gettempdir(), self.task_name)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         local_files = []
@@ -143,10 +146,10 @@ LIMIT {records_limit if records_limit else 'ALL'}"""
                     batch_size=5000,
                     alter=True,
                 )
+                records += tbl.count
                 logging.info(
                     f"Finished inserting data for table {self.table_name}. records: {records}"
                 )
-                records += tbl.count
         return records
 
 
@@ -297,6 +300,7 @@ def run_importers(
     force: bool = False,
     records_limit: int = None,
     session=None,
+    verbose: bool = False,
 ) -> dict:
     logging.info(f"Importing data to SQLite database")
     importers = get_importers(config)
@@ -315,7 +319,7 @@ def run_importers(
             try:
                 if tables is None or importer.table_name in tables:
                     records = importer.run(
-                        temp_file.name, to_day, force, records_limit, session
+                        temp_file.name, to_day, force, records_limit, session, verbose
                     )
                     tables_results[importer.table_name] = records
             except Exception as e:
@@ -336,21 +340,22 @@ def run_importers(
 
 
 def export_to_sqlite(
-    export_task: str,
+    task: str,
     to_day: str = None,
     tables: List[str] = None,
     force: bool = False,
     records_limit: int = None,
+    verbose: bool = False,
 ):
     logging.info("STARTING data import to SQLite")
-    config_path = f"{get_root_folder()}/export-tasks/{export_task}.json"
+    config_path = f"{get_root_folder()}/export-tasks/{task}.json"
     session = get_session()
     obj_data = get_s3_object_content(config_path, session)
     config = json.loads(obj_data)
     if to_day is None:
         to_day = get_yesterday()
     logging.info("FINISHED data import to SQLite")
-    return run_importers(config, to_day, tables, force, records_limit, session)
+    return run_importers(config, to_day, tables, force, records_limit, session, verbose)
 
 
 def upload_export_task(json_data: dict) -> dict:

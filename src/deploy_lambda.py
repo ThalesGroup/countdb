@@ -76,7 +76,7 @@ def deploy(version: str, update_config: bool = False, update_code: bool = True):
         with open(dep_package, "rb") as file:
             client.create_function(
                 FunctionName=_get_function_name(),
-                Runtime="python3.12",
+                Runtime="python3.13",
                 Role=os.environ["LAMBDA_ROLE"],
                 Description=description,
                 Environment=env_data,

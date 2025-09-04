@@ -36,6 +36,9 @@ def handle_event(event) -> Dict:
         return _do_drop_temp_tables(event)
     elif operation == "sqlite-export":
         del event["operation"]
+        if "table" in event:
+            event["tables"] = [event["table"]]
+            del event["table"]
         return export_to_sqlite(**event)
     else:
         return {"error": f"Unknown operation: {operation}"}

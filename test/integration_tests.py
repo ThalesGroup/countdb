@@ -375,7 +375,7 @@ class TestSimpleIntegrationDataset:
         result = handle_event(
             {
                 "operation": "sqlite-export",
-                "export_task": "simple_dataset_export",
+                "task": "simple_dataset_export",
                 "tables": ["counters_metadata", "daily_counters", "highlights"],
                 "force": True,
                 "to_day": "2024-05-31",
@@ -397,7 +397,7 @@ class TestSimpleIntegrationDataset:
         result = handle_event(
             {
                 "operation": "sqlite-export",
-                "export_task": "simple_dataset_export_filter",
+                "task": "simple_dataset_export_filter",
                 "tables": ["daily_counters", "highlights"],
                 "force": False,
                 "to_day": "2024-05-31",

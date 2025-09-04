@@ -239,9 +239,7 @@ def run_ctas_query(
                 )
 
         if len(current_keys) == 0:
-            athena_temp_table = (
-                f"{get_temp_database_name()}.temp_countdb_export_{query_name}"
-            )
+            athena_temp_table = f"{get_temp_database_name()}.temp_countdb_export_{query_name.replace('-', '_')}"
             ctas_sql = f"""CREATE TABLE {athena_temp_table} 
             WITH (external_location='s3://{get_bucket()}/{output_location}', 
                   bucketed_by=ARRAY['{field}'], bucket_count=1, 
