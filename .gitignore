@@ -14,3 +14,4 @@ do-not-commit/*
 **/.pytest_cache
 aws/**/config
 **/__pycache__/
+test/temp_cache/**
