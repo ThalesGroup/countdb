@@ -1,5 +1,7 @@
 import logging
 import os
+import sqlite3
+import tempfile
 
 import pytest
 
@@ -7,8 +9,9 @@ from athena_utils import get_query_results_dict, database_exists
 from conftest import get_b64_resource, init_aws_creds
 from countdb_cli import init_evn_from_config_file
 from events import handle_event
+from s3_utils import download_s3_file
 from table_creator import get_database_name
-from utils import days_range
+from utils import days_range, get_yesterday
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -354,3 +357,69 @@ class TestSimpleIntegrationDataset:
             )
             == 0
         )
+
+    @pytest.mark.parametrize(
+        "task_name", ["simple_dataset_export", "simple_dataset_export_filter"]
+    )
+    def test_sqlite_export_upload_task(self, task_name: str):
+        result = handle_event(
+            {
+                "operation": "upload",
+                "data": get_b64_resource(f"{task_name}.json"),
+            }
+        )
+        assert "errors" not in result
+        assert result["success"]
+
+    def test_sqlite_export(self):
+        result = handle_event(
+            {
+                "operation": "sqlite-export",
+                "export_task": "simple_dataset_export",
+                "tables": ["counters_metadata", "daily_counters", "highlights"],
+                "force": True,
+                "to_day": "2024-05-31",
+            }
+        )
+        assert "errors" not in result, result
+        assert result["success"], result
+        assert result["tables"] == {
+            "counters_metadata": 3,
+            "daily_counters": 155,
+            "highlights": 3,
+        }, result
+        assert (
+            result["target_object"]
+            == f"countdb/exports/name=simple_dataset_export/to_day={get_yesterday()}/data.db"
+        )
+
+    def test_sqlite_export_filter(self):
+        result = handle_event(
+            {
+                "operation": "sqlite-export",
+                "export_task": "simple_dataset_export_filter",
+                "tables": ["daily_counters", "highlights"],
+                "force": False,
+                "to_day": "2024-05-31",
+            }
+        )
+        assert "errors" not in result, result
+        assert result["success"], result
+        assert result["tables"] == {
+            "daily_counters": 31,
+            "highlights": 1,
+        }, result
+        with tempfile.NamedTemporaryFile() as f:
+            download_s3_file(result["target_object"], f.name)
+            assert os.path.getsize(f.name) > 10
+            with sqlite3.connect(f.name) as conn:
+                cursor = conn.execute(
+                    "SELECT int_key1, COUNT() FROM daily_counters GROUP BY int_key1"
+                )
+                result = cursor.fetchall()
+                assert result == [(11, 31)]
+                cursor = conn.execute(
+                    "SELECT int_key, COUNT() FROM highlights GROUP BY int_key"
+                )
+                result = cursor.fetchall()
+                assert result == [("[11]", 1)]

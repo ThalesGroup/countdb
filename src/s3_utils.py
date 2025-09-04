@@ -4,6 +4,8 @@ from typing import List, Dict
 
 import boto3
 import botocore.exceptions
+from botocore.exceptions import ClientError
+
 from boto3 import Session
 
 from utils import get_session
@@ -25,6 +27,18 @@ def upload_content_to_s3(object_path: str, content: str, session: Session = None
         logging.info(f"Writing file to S3. Key: {object_path}")
         obj = s3_resource.Object(get_bucket(), object_path)
         obj.put(Body=content, ACL="bucket-owner-full-control")
+        return []
+    except Exception as e:
+        return [str(e)]
+
+
+def upload_file_to_s3(
+    file_name: str, object_path: str, session: Session = None
+) -> List[str]:
+    s3_client = get_session(session).client("s3")
+    try:
+        logging.info(f"Uploading file to S3. Key: {object_path}")
+        s3_client.upload_file(file_name, get_bucket(), object_path)
         return []
     except Exception as e:
         return [str(e)]
@@ -191,3 +205,28 @@ def _life_cycle_rule_changed(
     ):
         return True
     return False
+
+
+def download_s3_file(key: str, local_path: str, session: Session = None):
+    s3 = get_session(session).client("s3")
+    try:
+        s3.download_file(get_bucket(), key, local_path)
+        logging.info(f"Downloaded {key} from bucket {get_bucket()} to {local_path}")
+    except ClientError as e:
+        logging.error(f"❌ Failed to download {key} from bucket {get_bucket()}: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"❌ Error downloading file: {e}")
+        raise
+
+
+def obj_exists(key: str, session: Session = None) -> bool:
+    s3_client = get_session(session).client("s3")
+    try:
+        s3_client.head_object(Bucket=get_bucket(), Key=key)
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "404":
+            return False
+        else:
+            raise e

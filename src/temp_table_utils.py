@@ -1,20 +1,14 @@
 import logging
-import os
 from random import randint
 from typing import List
 
 from boto3 import Session
 
 from athena_utils import run_query, get_query_results
-from utils import get_session, get_yesterday
+from utils import get_session, get_yesterday, get_temp_database_name
 import concurrent.futures
 
-_DEFAULT_TEMP_DATABASE_NAME = "countdb_temp"
 _TEMP_TABLE_PREFIX = "temp_ctas"
-
-
-def get_temp_database_name():
-    return os.environ.get("TEMP_DATABASE_NAME", _DEFAULT_TEMP_DATABASE_NAME)
 
 
 def _get_temp_table_prefix(day: str) -> str:

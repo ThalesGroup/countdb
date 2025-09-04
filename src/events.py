@@ -1,11 +1,13 @@
 import base64
+import json
 import logging
 from typing import Dict
 
 from aggregate import aggregate
 from counters import collect
-from datasets import update_dataset_str, clear_dataset_data
+from datasets import update_dataset, clear_dataset_data
 from detection_methods import detect_highlights
+from export_to_sqlite import upload_export_task, export_to_sqlite
 from max_counters import detect_max_records
 from table_creator import create_db, _drop_db
 from temp_table_utils import drop_temp_tables
@@ -17,7 +19,7 @@ def handle_event(event) -> Dict:
         raise Exception("Operation not sent")
     operation = event["operation"]
     if operation == "upload":
-        return _do_update_dataset(event)
+        return _do_upload(event)
     if operation == "init":
         return create_db(event)
     elif operation == "collect":
@@ -32,6 +34,9 @@ def handle_event(event) -> Dict:
         return _drop_db()
     elif operation == "drop-temp-tables":
         return _do_drop_temp_tables(event)
+    elif operation == "sqlite-export":
+        del event["operation"]
+        return export_to_sqlite(**event)
     else:
         return {"error": f"Unknown operation: {operation}"}
 
@@ -121,9 +126,13 @@ def _do_collect(args) -> Dict:
     )
 
 
-def _do_update_dataset(event: dict):
+def _do_upload(event: dict):
     conf_data = base64.b64decode(event["data"]).decode()
-    return update_dataset_str(conf_data)
+    json_data = json.loads(conf_data)
+    if "export-task" in json_data:
+        return upload_export_task(json_data)
+    else:
+        return update_dataset(json_data)
 
 
 def _do_clear_dataset(json_data):

@@ -1,0 +1,19 @@
+{
+  "export-task": "simple_dataset_export_filter",
+  "properties": {
+    "days": "30",
+    "weeks": "10",
+    "months": "3"
+  },
+  "filters": {
+    "ids": {"original": [1], "mapped": [11]}
+  },
+  "datasets": [
+    {
+      "name": "simple_dataset",
+      "counters": [
+        {"id": 2, "filter": "ids"}
+      ]
+    }
+  ]
+}

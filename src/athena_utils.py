@@ -1,12 +1,13 @@
 import logging
 import os
 import time
-from typing import Generator, Dict, Optional, Iterable
+from typing import Generator, Dict, Optional, Iterable, List
 
 from boto3 import Session
+from botocore.exceptions import ClientError
 
-from s3_utils import get_bucket
-from utils import get_session
+from s3_utils import get_bucket, list_s3_folder_keys, clear_s3_folder
+from utils import get_session, get_current_day, get_temp_database_name
 
 _SLEEP_AFTER_QUERY_SECONDS = 1
 _DEFAULT_QUERY_TIMEOUT = 300
@@ -210,3 +211,56 @@ def database_exists(database_name: str, session: Optional[Session] = None) -> bo
     for _ in query_result:
         return True
     return False
+
+
+def run_ctas_query(
+    query_name: str,
+    sql: str,
+    field: str,
+    force: bool = False,
+    query_stats: QueryStats = None,
+    session: Session = None,
+) -> List[str]:
+    try:
+        output_location = (
+            f"{os.environ['ATHENA_LOGS']}/day={get_current_day()}/name={query_name}/"
+        )
+        current_keys = list_s3_folder_keys(output_location, session)
+        if len(current_keys) > 0:
+            if force:
+                deleted = clear_s3_folder(output_location, session)
+                logging.info(
+                    f"Cleared {deleted} files from S3 folder: {output_location}"
+                )
+                current_keys = []
+            else:
+                logging.info(
+                    f"Found {len(current_keys)} files in S3 folder: {output_location}"
+                )
+
+        if len(current_keys) == 0:
+            athena_temp_table = (
+                f"{get_temp_database_name()}.temp_countdb_export_{query_name}"
+            )
+            ctas_sql = f"""CREATE TABLE {athena_temp_table} 
+            WITH (external_location='s3://{get_bucket()}/{output_location}', 
+                  bucketed_by=ARRAY['{field}'], bucket_count=1, 
+                  format='JSON') AS {sql}"""
+            run_query(
+                f"DROP TABLE IF EXISTS {athena_temp_table}",
+                query_stats,
+                session=session,
+            )
+            logging.info("Executing CTAS query...")
+            result = run_query(ctas_sql, query_stats, session=session)
+            logging.info(
+                f"✅ CTAS query succeeded. Output location: {output_location} Query ID: {result['QueryExecutionId']}"
+            )
+            current_keys = list_s3_folder_keys(output_location, session)
+        return current_keys
+    except ClientError as e:
+        logging.error(f"❌ AWS ClientError: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"❌ CTAS query failed: {e}")
+        raise

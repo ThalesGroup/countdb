@@ -5,9 +5,15 @@ from typing import Generator
 import boto3
 from boto3 import Session
 
+_DEFAULT_TEMP_DATABASE_NAME = "countdb_temp"
+
 
 def get_max_workers() -> int:
     return int(os.environ.get("MAX_WORKERS", 3))
+
+
+def get_temp_database_name():
+    return os.environ.get("TEMP_DATABASE_NAME", _DEFAULT_TEMP_DATABASE_NAME)
 
 
 def get_session(session: Session = None) -> boto3.Session:
@@ -19,6 +25,10 @@ def get_session(session: Session = None) -> boto3.Session:
 
 def get_yesterday() -> str:
     return str(date.today() - timedelta(1))
+
+
+def get_current_day() -> str:
+    return str(date.today())
 
 
 def get_day_back(back: int, relative_day: date = date.today()) -> str:

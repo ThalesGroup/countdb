@@ -213,8 +213,7 @@ def validate_counter_json(counter: dict) -> List[str]:
     return [f"Counter ID: {counter['id']} - {e}" for e in errors]
 
 
-def update_dataset_str(json_data_str: str) -> Dict:
-    json_data = json.loads(json_data_str)
+def update_dataset(json_data: dict) -> Dict:
     errors = _validate_dataset_json(json_data)
     if len(errors) > 0:
         return {"errors": errors}
@@ -224,7 +223,9 @@ def update_dataset_str(json_data_str: str) -> Dict:
         return {"errors": errors}
     _DATASETS[dataset.name] = dataset
     session = get_session()
-    errors = _persist_dataset(dataset.name, json_data_str, session=session)
+    errors = _persist_dataset(
+        dataset.name, json.dumps(json_data, indent=4), session=session
+    )
     if len(errors) > 0:
         return {"errors": errors}
     get_table_creator("counters_metadata").create_day(dataset.name, "", session=session)

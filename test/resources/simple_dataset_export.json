@@ -1,0 +1,18 @@
+{
+  "export-task": "simple_dataset_export",
+  "properties": {
+    "days": "30",
+    "weeks": "10",
+    "months": "3"
+  },
+  "datasets": [
+    {
+      "name": "simple_dataset",
+      "counters": [
+        {"id": 1},
+        {"id": 2},
+        {"id": 3}
+      ]
+    }
+  ]
+}
