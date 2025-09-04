@@ -390,7 +390,7 @@ class TestSimpleIntegrationDataset:
         }, result
         assert (
             result["target_object"]
-            == f"countdb/exports/name=simple_dataset_export/to_day={get_yesterday()}/data.db"
+            == f"countdb/exports/name=simple_dataset_export/to_day=2024-05-31/data.db"
         )
 
     def test_sqlite_export_filter(self):
