@@ -41,6 +41,15 @@ class TableImporter(ABC):
     def __init__(self, table_name: str, config: dict):
         self.table_name = table_name
         self.config = config
+        self.filter_config = self.calc_filter_config()
+
+    def calc_filter_config(self):
+        result = {d["name"]: {} for d in self.config["datasets"]}
+        for d in self.config["datasets"]:
+            for c in d["counters"]:
+                if "filter" in c and c["filter"]:
+                    result[d["name"]][c["id"]] = self.config["filters"][c["filter"]]
+        return result
 
     @property
     def task_name(self) -> str:
@@ -69,14 +78,11 @@ class TableImporter(ABC):
         return "TRUE"
 
     def update_line(self, line: Dict[str, Any]) -> dict[str, Any]:
-        for d in self.config["datasets"]:
-            if d["name"] == line["dataset"]:
-                for c in d["counters"]:
-                    if c["id"] == line["counter_id"]:
-                        if c["filter"]:
-                            self.update_key(line, self.config["filters"][c["filter"]])
-                        break
-                break
+        if line["counter_id"] in self.filter_config[line["dataset"]]:
+            self.update_key(
+                line,
+                self.filter_config[line["dataset"]][line["counter_id"]],
+            )
         return line
 
     @abstractmethod
