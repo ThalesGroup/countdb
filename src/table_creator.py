@@ -1,7 +1,7 @@
 import logging
 import os
 import threading
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 from typing import Dict, Iterable, Optional
 
 from boto3 import Session
@@ -27,7 +27,7 @@ def get_database_name() -> str:
     return os.environ.get("DATABASE_NAME", _DEFAULT_DATABASE_NAME)
 
 
-class TableCreator:
+class TableCreator(ABC):
     """
     Abstract base class for creating and managing external tables in AWS Athena.
 

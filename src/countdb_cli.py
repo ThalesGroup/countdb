@@ -76,12 +76,7 @@ def _parse_cli_input(argv) -> dict:
     parser.add_argument(
         "--table", required=False, help="Init or Clear for a specific table"
     )
-    parser.add_argument(
-        "--config",
-        required=False,
-        default=_DEFAULT_CONFIG_FILE,
-        help=f"Configuration file. Default file is {_DEFAULT_CONFIG_FILE}",
-    )
+    _add_config_file_arg(parser)
     parser.add_argument(
         "--verbose",
         required=False,
@@ -92,6 +87,15 @@ def _parse_cli_input(argv) -> dict:
     args_namespace = parser.parse_args(args=argv)
     args = {k: v for k, v in vars(args_namespace).items() if v}
     return args
+
+
+def _add_config_file_arg(parser):
+    parser.add_argument(
+        "--config",
+        required=False,
+        default=_DEFAULT_CONFIG_FILE,
+        help=f"Configuration file. Default file is {_DEFAULT_CONFIG_FILE}",
+    )
 
 
 def _run_cli_command(command: dict):

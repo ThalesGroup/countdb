@@ -41,6 +41,8 @@ class AthenaMockQueryHandler(ABC):
         )
         if m is not None:
             return self.query_match(m, exec_params, context)
+        else:
+            return None
 
     @staticmethod
     def query_match(
@@ -76,7 +78,7 @@ class MyAthenaBackend(AthenaBackend):
         execution_parameters: Optional[List[str]],
     ) -> str:
         e_id = super().start_query_execution(
-            query, context, config, workgroup, execution_parameters
+            query, context, config, str(workgroup), execution_parameters
         )
         for handler in self._start_query_handlers:
             handler.run_query(query, execution_parameters, self._context)
