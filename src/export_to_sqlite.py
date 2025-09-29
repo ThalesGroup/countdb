@@ -248,7 +248,7 @@ class MonthlyCounters(TimeCounters):
 
     def get_time_filter(self, to_day: str) -> str:
         months = self.get_property("months", 12)
-        return f"""month BETWEEN SUBSTRING(CAST(DATE_ADD('month', {months}, DATE('{to_day}')) AS VARCHAR), 1, 7) 
+        return f"""month BETWEEN SUBSTRING(CAST(DATE_ADD('month', -{months}, DATE('{to_day}')) AS VARCHAR), 1, 7) 
                                  AND SUBSTRING(CAST(DATE('{to_day}') AS VARCHAR), 1, 7)"""
 
 
