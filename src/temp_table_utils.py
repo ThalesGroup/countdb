@@ -1,28 +1,45 @@
 import logging
+from datetime import datetime, timedelta, timezone
 from random import randint
-from typing import List
+from typing import List, Optional
 
 from boto3 import Session
 
-from athena_utils import run_query, get_query_results
-from utils import get_session, get_yesterday, get_temp_database_name
+from utils import get_session, get_temp_database_name
 import concurrent.futures
 
 _TEMP_TABLE_PREFIX = "temp_ctas"
+
+
+_DEFAULT_MAX_AGE_HOURS = 24
 
 
 def _get_temp_table_prefix(day: str) -> str:
     return f"{_TEMP_TABLE_PREFIX}_{day.replace('-', '_')}"
 
 
-def _get_table_names(table_filter: str, session: Session) -> List[str]:
-    query_results = get_query_results(
-        f"SHOW TABLES IN {get_temp_database_name()} LIKE '{table_filter}'",
-        session=session,
-    )
-    return [
-        row["Data"][0]["VarCharValue"] for row in query_results["ResultSet"]["Rows"]
-    ]
+def _get_expired_table_names(
+    max_age_hours: float, session: Session, now: Optional[datetime] = None
+) -> List[str]:
+    """Names of temp tables created more than max_age_hours ago.
+
+    Selection is by Glue creation time and not by a date in the table name, since
+    the name's middle part is not necessarily a date (e.g. temp_ctas_day_123456).
+    """
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(hours=max_age_hours)
+    paginator = session.client("glue").get_paginator("get_tables")
+    names = []
+    try:
+        for page in paginator.paginate(DatabaseName=get_temp_database_name()):
+            for table in page["TableList"]:
+                if (
+                    table["Name"].startswith(_TEMP_TABLE_PREFIX)
+                    and table["CreateTime"] < cutoff
+                ):
+                    names.append(table["Name"])
+    except session.client("glue").exceptions.EntityNotFoundException:
+        logging.warning(f"Temp database {get_temp_database_name()} not found")
+    return names
 
 
 def generate_temp_table_name(day: str):
@@ -34,10 +51,11 @@ def drop_temp_tables(event: dict) -> int:
         f"START dropping temporary tables from database: {get_temp_database_name()}. Args: {event}"
     )
     session = get_session()
-    day_fileter = event.get("day", get_yesterday())
-    table_filter = _get_temp_table_prefix(day_fileter) + "*"
-    table_names = _get_table_names(table_filter, session)
-    logging.info(f"Filter: {table_filter} Found {len(table_names)} tables to drop")
+    max_age_hours = event.get("max_age_hours", _DEFAULT_MAX_AGE_HOURS)
+    table_names = _get_expired_table_names(max_age_hours, session)
+    logging.info(
+        f"Found {len(table_names)} temp tables older than {max_age_hours} hours to drop"
+    )
     max_workers = event.get("max_workers", 3)
     logging.info(f"Max workers: {max_workers}")
     dropped_tables_num = 0
@@ -45,9 +63,10 @@ def drop_temp_tables(event: dict) -> int:
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=max_workers, thread_name_prefix="drop_temp_table_"
     ) as thread_pool:
-        futures = []
-        for table_name in table_names:
-            futures.append(thread_pool.submit(_drop_table, table_name, session))
+        futures = [
+            thread_pool.submit(_drop_table, table_name, session)
+            for table_name in table_names
+        ]
         for f in concurrent.futures.as_completed(futures):
             if f.result():
                 dropped_tables_num += 1
@@ -55,7 +74,6 @@ def drop_temp_tables(event: dict) -> int:
                 errors += 1
             if (dropped_tables_num + errors) % 50 == 0:
                 logging.info(f"Tables dropped: {dropped_tables_num}. Errs: {errors}")
-        logging.info(f"Tables dropped: {dropped_tables_num}")
     logging.info(
         f"FINISHED dropping temporary tables. Dropped {dropped_tables_num} tables. Errs: {errors}"
     )
@@ -63,7 +81,12 @@ def drop_temp_tables(event: dict) -> int:
 
 
 def _drop_table(table_name: str, session: Session) -> bool:
-    result = run_query(
-        f"DROP TABLE {get_temp_database_name()}.{table_name}", session=session
-    )
-    return result.get("Status") == "SUCCEEDED"
+    # Only the Glue entry is removed: the tables are external, so S3 data is kept.
+    try:
+        session.client("glue").delete_table(
+            DatabaseName=get_temp_database_name(), Name=table_name
+        )
+        return True
+    except Exception as e:
+        logging.warning(f"Failed dropping temp table {table_name}: {e}")
+        return False

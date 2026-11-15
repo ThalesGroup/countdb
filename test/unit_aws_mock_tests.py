@@ -182,3 +182,29 @@ class TestSimpleDataset:
         }
         result = handle_event(params)
         assert {"operation": "detect"}.items() <= result.items()
+
+
+def test_drop_temp_tables_by_creation_time(monkeypatch):
+    import boto3
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import patch
+    import temp_table_utils
+
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("TEMP_DATABASE_NAME", "tmpdb")
+    with mock_aws():
+        glue = boto3.client("glue")
+        glue.create_database(DatabaseInput={"Name": "tmpdb"})
+        for name in ["temp_ctas_day_111111", "temp_ctas_week_222222", "other_table"]:
+            glue.create_table(DatabaseName="tmpdb", TableInput={"Name": name})
+        session = boto3.Session()
+        # nothing is old enough yet
+        assert temp_table_utils._get_expired_table_names(24, session) == []
+        future = datetime.now(timezone.utc) + timedelta(hours=48)
+        expired = temp_table_utils._get_expired_table_names(24, session, now=future)
+        assert sorted(expired) == ["temp_ctas_day_111111", "temp_ctas_week_222222"]
+        assert temp_table_utils._drop_table("temp_ctas_day_111111", session)
+        # max_age_hours=-1 makes every temp_ctas table expired
+        assert temp_table_utils.drop_temp_tables({"max_age_hours": -1}) == 1
+        remaining = [t["Name"] for t in glue.get_tables(DatabaseName="tmpdb")["TableList"]]
+        assert remaining == ["other_table"]
