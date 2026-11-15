@@ -6,13 +6,15 @@
     "months": "3"
   },
   "filters": {
-    "ids": {"original": [1], "mapped": [11]}
+    "ids": {"original": [1], "mapped": [11]},
+    "todo": "filter by year and by number queried from the vuls table",
+    "cves": {"sql": "{key} >= "}
   },
   "datasets": [
     {
       "name": "simple_dataset",
       "counters": [
-        {"id": 2, "filter": "ids"}
+        {"id": 1, "filter": "cves"}
       ]
     }
   ]

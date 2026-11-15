@@ -87,6 +87,11 @@ def _parse_cli_input(argv) -> dict:
     parser.add_argument(
         "--task", required=False, help="export task name for sqlite-export operation"
     )
+    parser.add_argument(
+        "--records_limit",
+        required=False,
+        help="Records limit for sqlite-export operation",
+    )
     _add_config_file_arg(parser)
     parser.add_argument(
         "--verbose",
